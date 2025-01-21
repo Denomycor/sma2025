@@ -32,9 +32,8 @@ public class BazaarAgent extends Agent {
     // prices of spices fluctuate based on demand and unexpected events
     // constant interaction, temporary alliances, betrayals
 
-    // quando é que o mercado acaba ???
-
     private List<AID> activeParticipants;
+    private static final int TOTAL_ROUNDS = 15;
 
     @Override
     protected void setup() {
@@ -45,7 +44,14 @@ public class BazaarAgent extends Agent {
         if (participantAgents != null && participantAgents.length > 0) {
             for (AID participant : participantAgents) {
                 activeParticipants.add(participant);
-                System.out.println(participant);
+                System.out.println(participant.getName());
+            }
+
+            for (int i = 1; i <= TOTAL_ROUNDS; i++) {
+                System.out.println(getLocalName() + " - Starting round" + i);
+
+                // implementar ronda
+
             }
         }
     }
