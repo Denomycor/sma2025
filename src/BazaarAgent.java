@@ -5,6 +5,7 @@ import java.util.List;
 
 import jade.core.AID;
 import jade.core.Agent;
+import jade.core.behaviours.Behaviour;
 import jade.domain.DFService;
 import jade.domain.FIPAException;
 import jade.domain.FIPAAgentManagement.DFAgentDescription;
@@ -54,6 +55,8 @@ public class BazaarAgent extends Agent {
 
             }
         }
+
+        add_behavior(new RoundBehaviour(this));
     }
 
     private AID[] findAgentsByService(String serviceType) {
@@ -75,4 +78,18 @@ public class BazaarAgent extends Agent {
         }
     }
 
+
+    private class RoundBehaviour extends Behaviour {
+        
+        int round_counter = 0;
+        int round_max = 10;
+
+        public void action() {
+            // round implementation
+        }
+
+        public boolean done() {
+            return round_counter < round_max;
+        }
+    }
 }
