@@ -1,15 +1,19 @@
-package projectAgents;
-
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 import jade.core.AID;
 import jade.core.Agent;
 import jade.core.behaviours.Behaviour;
+import jade.core.behaviours.OneShotBehaviour;
+import jade.core.behaviours.SequentialBehaviour;
+import jade.core.behaviours.SimpleBehaviour;
 import jade.domain.DFService;
 import jade.domain.FIPAException;
 import jade.domain.FIPAAgentManagement.DFAgentDescription;
 import jade.domain.FIPAAgentManagement.ServiceDescription;
+import jade.lang.acl.ACLMessage;
 
 public class BazaarAgent extends Agent {
 
@@ -20,7 +24,7 @@ public class BazaarAgent extends Agent {
     // 1. Market update
     //  prices are announced (with associated coin value)
     //  events might have a probability of happening
-    // 2. Exchanges and negotiations 
+    // 2. Exchanges and negotiations
     // between merchants
     // 3. Sale to the Market
     // agents decide so sell or hold
@@ -35,10 +39,13 @@ public class BazaarAgent extends Agent {
 
     private List<AID> activeParticipants;
     private static final int TOTAL_ROUNDS = 15;
+    private Map<String, Integer> spicePrices = new HashMap<>();
+    private List<String> events = new ArrayList<>();
 
     @Override
     protected void setup() {
         System.out.println("BazzarAgent" + getLocalName() + " started");
+        iniciatePrices();
         activeParticipants = new ArrayList<>();
 
         AID[] participantAgents = findAgentsByService("market");
@@ -57,9 +64,16 @@ public class BazaarAgent extends Agent {
         }
 
         SequentialBehaviour behaviour = new SequentialBehaviour(this);
-        behaviour.addSubBehaviour(new GameStartBehaviour(this));
-        behaviour.addSubBehaviour(new RoundBehaviour(this));
+        behaviour.addSubBehaviour(new GameStartBehaviour());
+        behaviour.addSubBehaviour(new RoundBehaviour());
         addBehaviour(behaviour);
+    }
+
+    private void iniciatePrices() {
+        spicePrices.put("Cravinho", 20);
+        spicePrices.put("Cinnamon", 5);
+        spicePrices.put("Nutmeg", 15);
+        spicePrices.put("Cardamom", 10);
     }
 
     private AID[] findAgentsByService(String serviceType) {
@@ -82,13 +96,51 @@ public class BazaarAgent extends Agent {
     }
 
 
-    private class RoundBehaviour extends Behaviour {
-        
+
+
+    private class RoundBehaviour extends SimpleBehaviour {
+
         int round_counter = 0;
         int round_max = 10;
 
         public void action() {
-            // round implementation
+            int cravinho_stock = 0;
+            int cinnamon_stock = 0;
+            int nutmeg_stock = 0;
+            int cardamom_stock = 0;
+
+            // 1. Ask for stock to all participants
+            ACLMessage requestStock = new ACLMessage(ACLMessage.REQUEST);
+            requestStock.setContent("STOCK");
+            for (AID participant : activeParticipants) {
+                requestStock.addReceiver(participant);
+            }
+            myAgent.send(requestStock);
+
+
+
+            // 2. Receive answers of stock from all participants
+            int responsesReceived = 0;
+            while (responsesReceived < activeParticipants.size()) {
+                ACLMessage reply = myAgent.blockingReceive();
+                if (reply != null && reply.getPerformative() == ACLMessage.INFORM) {
+                    responsesReceived++;
+                    String content = reply.getContent();
+                    String[] stocks = content.split(",");
+
+                    cravinho_stock += Integer.parseInt(stocks[0]);
+                    cinnamon_stock += Integer.parseInt(stocks[1]);
+                    nutmeg_stock += Integer.parseInt(stocks[2]);
+                    cardamom_stock += Integer.parseInt(stocks[3]);
+                }
+            }
+
+            System.out.println("Cravinho: "+ cravinho_stock);
+            System.out.println("Cinnamon: "+ cinnamon_stock);
+            System.out.println("Nutmeg: "+ nutmeg_stock);
+            System.out.println("Cardamom: "+ cardamom_stock);
+
+
         }
 
         public boolean done() {
