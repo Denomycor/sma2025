@@ -56,7 +56,10 @@ public class BazaarAgent extends Agent {
             }
         }
 
-        add_behavior(new RoundBehaviour(this));
+        SequentialBehaviour behaviour = new SequentialBehaviour(this);
+        behaviour.addSubBehaviour(new GameStartBehaviour(this));
+        behaviour.addSubBehaviour(new RoundBehaviour(this));
+        addBehaviour(behaviour);
     }
 
     private AID[] findAgentsByService(String serviceType) {
@@ -90,6 +93,12 @@ public class BazaarAgent extends Agent {
 
         public boolean done() {
             return round_counter < round_max;
+        }
+    }
+
+    private class GameStartBehaviour extends OneShotBehaviour {
+        public void action() {
+            // game start implementation
         }
     }
 }
