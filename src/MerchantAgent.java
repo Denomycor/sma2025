@@ -1,17 +1,64 @@
 package projectAgents;
 
 import jade.core.Agent;
+import jade.core.behaviours.CyclicBehaviour;
 import jade.domain.DFService;
 import jade.domain.FIPAException;
 import jade.domain.FIPAAgentManagement.DFAgentDescription;
 import jade.domain.FIPAAgentManagement.ServiceDescription;
+import jade.lang.acl.ACLMessage;
+
+import java.util.HashMap;
+import java.util.Map;
 
 public class MerchantAgent extends Agent {
 
+    private Map<String, Integer> stock;
+
     protected void setup() {
         System.out.println("MerchantAgent" + getLocalName() + " started");
+
+        initializeStock();
+
         registerInDF("market", "market-service");
 
+        addBehaviour(new StockRequestHandler());
+    }
+
+    private void initializeStock() {
+        stock = new HashMap<>();
+        stock.put("Cravinho", 10);
+        stock.put("Cinnamon", 15);
+        stock.put("Nutmeg", 20);
+        stock.put("Cardamom", 12);
+    }
+
+    private String getStockAsCommaSeparatedString() {
+        return stock.get("Cravinho") + "," +
+               stock.get("Cinnamon") + "," +
+               stock.get("Nutmeg") + "," +
+               stock.get("Cardamom");
+    }
+
+    private class StockRequestHandler extends CyclicBehaviour {
+        @Override
+        public void action() {
+            ACLMessage msg = myAgent.receive();
+            if (msg != null) {
+                if (msg.getPerformative() == ACLMessage.REQUEST && "STOCK".equals(msg.getContent())) {
+                    System.out.println(getLocalName() + " received stock request from " + msg.getSender().getLocalName());
+
+                    ACLMessage reply = msg.createReply();
+                    reply.setPerformative(ACLMessage.INFORM);
+                    reply.setContent(getStockAsCommaSeparatedString());
+                    myAgent.send(reply);
+
+                    System.out.println(getLocalName() + " sent stock details: " + getStockAsCommaSeparatedString());
+                }
+            } else {
+                block();
+            }
+        }
     }
 
     private void registerInDF(String serviceType, String serviceName) {
