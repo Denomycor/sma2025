@@ -46,9 +46,9 @@ public class MerchantAgent extends Agent {
 
     private String getStockAsCommaSeparatedString() {
         return stock.get("Cravinho") + "," +
-               stock.get("Cinnamon") + "," +
-               stock.get("Nutmeg") + "," +
-               stock.get("Cardamom");
+                stock.get("Cinnamon") + "," +
+                stock.get("Nutmeg") + "," +
+                stock.get("Cardamom");
     }
 
     private class StockRequestHandler extends CyclicBehaviour {
@@ -57,7 +57,8 @@ public class MerchantAgent extends Agent {
             ACLMessage msg = myAgent.receive();
             if (msg != null) {
                 if (msg.getPerformative() == ACLMessage.REQUEST && "STOCK".equals(msg.getContent())) {
-                    System.out.println(getLocalName() + " received stock request from " + msg.getSender().getLocalName());
+                    System.out
+                            .println(getLocalName() + " received stock request from " + msg.getSender().getLocalName());
 
                     ACLMessage reply = msg.createReply();
                     reply.setPerformative(ACLMessage.INFORM);
@@ -77,19 +78,16 @@ public class MerchantAgent extends Agent {
         public void action() {
             ACLMessage msg = myAgent.receive();
             if (msg != null) {
-                if (msg.getPerformative() == ACLMessage.INFORM && msg.getContent().startsWith("Updated Prices:")) {
-                    System.out.println(getLocalName() + " received price update from " + msg.getSender().getLocalName());
+                if (msg.getPerformative() == ACLMessage.INFORM) {
+                    System.out
+                            .println(getLocalName() + " received price update from " + msg.getSender().getLocalName());
 
-                    String content = msg.getContent().replace("Updated Prices: ", "").trim();
-                    String[] priceEntries = content.split(", ");
-                    for (String entry : priceEntries) {
-                        String[] keyValue = entry.split("=");
-                        if (keyValue.length == 2) {
-                            String spice = keyValue[0].trim();
-                            int price = Integer.parseInt(keyValue[1].trim());
-                            currentPrices.put(spice, price);
-                        }
-                    }
+                    String[] prices = msg.getContent().split(",");
+                    currentPrices.put("Cravinho", Integer.parseInt(prices[0].trim()));
+                    currentPrices.put("Cinnamon", Integer.parseInt(prices[1].trim()));
+                    currentPrices.put("Nutmeg", Integer.parseInt(prices[2].trim()));
+                    currentPrices.put("Cardamom", Integer.parseInt(prices[3].trim()));
+
                     System.out.println(getLocalName() + " updated prices: " + currentPrices);
                 }
             } else {

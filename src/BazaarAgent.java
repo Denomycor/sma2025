@@ -77,23 +77,11 @@ public class BazaarAgent extends Agent {
         spicePrices.put("Cardamom", 10);
     }
 
-    private AID[] findAgentsByService(String serviceType) {
-        try {
-            DFAgentDescription dfd = new DFAgentDescription();
-            ServiceDescription sd = new ServiceDescription();
-            sd.setType(serviceType);
-            dfd.addServices(sd);
-
-            DFAgentDescription[] result = DFService.search(this, dfd);
-            AID[] agentIDs = new AID[result.length];
-            for (int i = 0; i < result.length; i++) {
-                agentIDs[i] = result[i].getName();
-            }
-            return agentIDs;
-        } catch (FIPAException e) {
-            e.printStackTrace();
-            return null;
-        }
+    private String getPricesAsCommaSeparatedString() {
+        return spicePrices.get("Cravinho") + "," +
+                spicePrices.get("Cinnamon") + "," +
+                spicePrices.get("Nutmeg") + "," +
+                spicePrices.get("Cardamom");
     }
 
     private class GameStartBehaviour extends OneShotBehaviour {
@@ -138,17 +126,24 @@ public class BazaarAgent extends Agent {
                 }
             }
 
-            System.out.println("Cravinho: "+ cravinho_stock);
-            System.out.println("Cinnamon: "+ cinnamon_stock);
-            System.out.println("Nutmeg: "+ nutmeg_stock);
-            System.out.println("Cardamom: "+ cardamom_stock);
+            System.out.println("Cravinho: " + cravinho_stock);
+            System.out.println("Cinnamon: " + cinnamon_stock);
+            System.out.println("Nutmeg: " + nutmeg_stock);
+            System.out.println("Cardamom: " + cardamom_stock);
 
             adjustPrices(cravinho_stock, cinnamon_stock, nutmeg_stock, cardamom_stock);
 
-            broadcastPrices();
+            // broadcast prices
+            ACLMessage priceMessage = new ACLMessage(ACLMessage.INFORM);
+            String priceInfo = getPricesAsCommaSeparatedString();
+            priceMessage.setContent(priceInfo);
+            for (AID participant : activeParticipants) {
+                priceMessage.addReceiver(participant);
+            }
+            send(priceMessage);
+            System.out.println("Broadcasted prices to participants: " + priceInfo);
 
-
-            round_counter ++;
+            round_counter++;
         }
 
         public boolean done() {
@@ -189,23 +184,23 @@ public class BazaarAgent extends Agent {
         System.out.println("Updated spice prices: " + spicePrices);
     }
 
-    private void broadcastPrices() {
-        ACLMessage priceMessage = new ACLMessage(ACLMessage.INFORM);
-        StringBuilder priceInfo = new StringBuilder("Updated Prices: ");
-        int count = 0;
-        for (Map.Entry<String, Integer> entry : spicePrices.entrySet()) {
-            priceInfo.append(entry.getKey()).append("=").append(entry.getValue());
-            if (++count < spicePrices.size()) {
-                priceInfo.append(", ");
+    private AID[] findAgentsByService(String serviceType) {
+        try {
+            DFAgentDescription dfd = new DFAgentDescription();
+            ServiceDescription sd = new ServiceDescription();
+            sd.setType(serviceType);
+            dfd.addServices(sd);
+
+            DFAgentDescription[] result = DFService.search(this, dfd);
+            AID[] agentIDs = new AID[result.length];
+            for (int i = 0; i < result.length; i++) {
+                agentIDs[i] = result[i].getName();
             }
+            return agentIDs;
+        } catch (FIPAException e) {
+            e.printStackTrace();
+            return null;
         }
-        priceMessage.setContent(priceInfo.toString());
-        for (AID participant : activeParticipants) {
-            priceMessage.addReceiver(participant);
-        }
-        send(priceMessage);
-    
-        System.out.println("Broadcasted prices to participants: " + spicePrices);
     }
 
 }
