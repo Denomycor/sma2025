@@ -40,16 +40,16 @@ import jade.lang.acl.ACLMessage;
 
 public class BazaarAgent extends Agent {
 
-    // private static final int TOTAL_ROUNDS = 10;
-    // private List<String> events = new ArrayList<>();
-
     private List<AID> activeParticipants;
-    private Map<String, Integer> spicePrices = new HashMap<>();
+    private static final int TOTAL_ROUNDS = 10;
+    private Map<String, Integer> currentPrices = new HashMap<>();
+    private Map<String, Integer> stock = new HashMap<>();
 
     @Override
     protected void setup() {
         System.out.println("BazzarAgent" + getLocalName() + " started");
         iniciatePrices();
+        initializeStock();
         activeParticipants = new ArrayList<>();
 
         AID[] participantAgents = findAgentsByService("market");
@@ -71,17 +71,31 @@ public class BazaarAgent extends Agent {
     }
 
     private void iniciatePrices() {
-        spicePrices.put("Cravinho", 20);
-        spicePrices.put("Cinnamon", 5);
-        spicePrices.put("Nutmeg", 15);
-        spicePrices.put("Cardamom", 10);
+        currentPrices.put("Cravinho", 20);
+        currentPrices.put("Cinnamon", 5);
+        currentPrices.put("Nutmeg", 15);
+        currentPrices.put("Cardamom", 10);
+    }
+
+    private void initializeStock() {
+        stock.put("Cravinho", 0);
+        stock.put("Cinnamon", 0);
+        stock.put("Nutmeg", 0);
+        stock.put("Cardamom", 0);
+    }
+
+    private void resetStock() {
+        stock.put("Cravinho", 0);
+        stock.put("Cinnamon", 0);
+        stock.put("Nutmeg", 0);
+        stock.put("Cardamom", 0);
     }
 
     private String getPricesAsCommaSeparatedString() {
-        return spicePrices.get("Cravinho") + "," +
-                spicePrices.get("Cinnamon") + "," +
-                spicePrices.get("Nutmeg") + "," +
-                spicePrices.get("Cardamom");
+        return  currentPrices.get("Cravinho") + "," +
+                currentPrices.get("Cinnamon") + "," +
+                currentPrices.get("Nutmeg") + "," +
+                currentPrices.get("Cardamom");
     }
 
     private class GameStartBehaviour extends OneShotBehaviour {
@@ -94,15 +108,13 @@ public class BazaarAgent extends Agent {
     private class RoundBehaviour extends SimpleBehaviour {
 
         int round_counter = 0;
-        int round_max = 10;
 
         public void action() {
-            int cravinho_stock = 0;
-            int cinnamon_stock = 0;
-            int nutmeg_stock = 0;
-            int cardamom_stock = 0;
+            resetStock();
 
-            // 1. Ask for stock to all participants
+            // Get Stock
+
+            // 1. Ask for stock from all participants
             ACLMessage requestStock = new ACLMessage(ACLMessage.REQUEST);
             requestStock.setContent("STOCK");
             for (AID participant : activeParticipants) {
@@ -110,7 +122,7 @@ public class BazaarAgent extends Agent {
             }
             myAgent.send(requestStock);
 
-            // 2. Receive answers of stock from all participants
+            // 2. Receive stock responses and update centralized stock
             int responsesReceived = 0;
             while (responsesReceived < activeParticipants.size()) {
                 ACLMessage reply = myAgent.blockingReceive();
@@ -119,21 +131,23 @@ public class BazaarAgent extends Agent {
                     String content = reply.getContent();
                     String[] stocks = content.split(",");
 
-                    cravinho_stock += Integer.parseInt(stocks[0]);
-                    cinnamon_stock += Integer.parseInt(stocks[1]);
-                    nutmeg_stock += Integer.parseInt(stocks[2]);
-                    cardamom_stock += Integer.parseInt(stocks[3]);
+                    stock.put("Cravinho", stock.get("Cravinho") + Integer.parseInt(stocks[0]));
+                    stock.put("Cinnamon", stock.get("Cinnamon") + Integer.parseInt(stocks[1]));
+                    stock.put("Nutmeg", stock.get("Nutmeg") + Integer.parseInt(stocks[2]));
+                    stock.put("Cardamom", stock.get("Cardamom") + Integer.parseInt(stocks[3]));
                 }
             }
 
-            System.out.println("Cravinho: " + cravinho_stock);
-            System.out.println("Cinnamon: " + cinnamon_stock);
-            System.out.println("Nutmeg: " + nutmeg_stock);
-            System.out.println("Cardamom: " + cardamom_stock);
+            System.out.println("Updated stock: " + stock);
 
-            adjustPrices(cravinho_stock, cinnamon_stock, nutmeg_stock, cardamom_stock);
 
-            // broadcast prices
+            // Update Prices
+
+            adjustPrices();
+            
+
+            // Broadcast Prices
+
             ACLMessage priceMessage = new ACLMessage(ACLMessage.INFORM);
             String priceInfo = getPricesAsCommaSeparatedString();
             priceMessage.setContent(priceInfo);
@@ -147,41 +161,47 @@ public class BazaarAgent extends Agent {
         }
 
         public boolean done() {
-            return round_counter < round_max;
+            return round_counter >= TOTAL_ROUNDS;
         }
     }
 
-    private void adjustPrices(int cravinhoStock, int cinnamonStock, int nutmegStock, int cardamomStock) {
+    private void adjustPrices() {
+        // Access centralized stock directly
+        int cravinhoStock = stock.get("Cravinho");
+        int cinnamonStock = stock.get("Cinnamon");
+        int nutmegStock = stock.get("Nutmeg");
+        int cardamomStock = stock.get("Cardamom");
+    
         // cravinho rare and valuable
         if (cravinhoStock < 10) {
-            spicePrices.put("Cravinho", spicePrices.get("Cravinho") + 10);
+            currentPrices.put("Cravinho", currentPrices.get("Cravinho") + 10);
         } else if (cravinhoStock > 30) {
-            spicePrices.put("Cravinho", Math.max(20, spicePrices.get("Cravinho") - 5));
+            currentPrices.put("Cravinho", Math.max(20, currentPrices.get("Cravinho") - 5));
         }
-
+    
         // cinnamon stable
         if (cinnamonStock > 40) {
-            spicePrices.put("Cinnamon", Math.max(3, spicePrices.get("Cinnamon") - 1));
+            currentPrices.put("Cinnamon", Math.max(3, currentPrices.get("Cinnamon") - 1));
         } else if (cinnamonStock < 20) {
-            spicePrices.put("Cinnamon", spicePrices.get("Cinnamon") + 2);
+            currentPrices.put("Cinnamon", currentPrices.get("Cinnamon") + 2);
         }
-
+    
         // nutmeg sensitive to demand
         if (nutmegStock < 15) {
-            spicePrices.put("Nutmeg", spicePrices.get("Nutmeg") + 10);
+            currentPrices.put("Nutmeg", currentPrices.get("Nutmeg") + 10);
         } else if (nutmegStock > 35) {
-            spicePrices.put("Nutmeg", Math.max(10, spicePrices.get("Nutmeg") - 5));
+            currentPrices.put("Nutmeg", Math.max(10, currentPrices.get("Nutmeg") - 5));
         }
-
+    
         // cardamom volatile
         if (cardamomStock < 10) {
-            spicePrices.put("Cardamom", spicePrices.get("Cardamom") + 5);
+            currentPrices.put("Cardamom", currentPrices.get("Cardamom") + 5);
         } else if (cardamomStock > 40) {
-            spicePrices.put("Cardamom", Math.max(5, spicePrices.get("Cardamom") - 3));
+            currentPrices.put("Cardamom", Math.max(5, currentPrices.get("Cardamom") - 3));
         }
-
+    
         // for debug
-        System.out.println("Updated spice prices: " + spicePrices);
+        System.out.println("Updated spice prices: " + currentPrices);
     }
 
     private AID[] findAgentsByService(String serviceType) {
