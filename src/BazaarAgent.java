@@ -42,7 +42,7 @@ public class BazaarAgent extends Agent {
 
     private List<AID> activeParticipants;
     private static final int TOTAL_ROUNDS = 10;
-    private Map<String, Integer> currentPrices = new HashMap<>();
+    private Map<String, Integer> prices = new HashMap<>();
     private Map<String, Integer> stock = new HashMap<>();
 
     @Override
@@ -56,7 +56,8 @@ public class BazaarAgent extends Agent {
         if (participantAgents != null && participantAgents.length > 0) {
             for (AID participant : participantAgents) {
                 activeParticipants.add(participant);
-                System.out.println(participant.getName());
+                System.out.println("Participant agents:");
+                System.out.println(participant.getLocalName());
             }
 
             SequentialBehaviour behaviour = new SequentialBehaviour(this);
@@ -65,16 +66,16 @@ public class BazaarAgent extends Agent {
             addBehaviour(behaviour);
 
         } else {
-            System.out.println("No participant agents found.");
+            System.out.println("No participant agents found");
             doDelete();
         }
     }
 
     private void iniciatePrices() {
-        currentPrices.put("Cravinho", 20);
-        currentPrices.put("Cinnamon", 5);
-        currentPrices.put("Nutmeg", 15);
-        currentPrices.put("Cardamom", 10);
+        prices.put("Cravinho", 20);
+        prices.put("Cinnamon", 5);
+        prices.put("Nutmeg", 15);
+        prices.put("Cardamom", 10);
     }
 
     private void initializeStock() {
@@ -92,10 +93,10 @@ public class BazaarAgent extends Agent {
     }
 
     private String getPricesAsCommaSeparatedString() {
-        return  currentPrices.get("Cravinho") + "," +
-                currentPrices.get("Cinnamon") + "," +
-                currentPrices.get("Nutmeg") + "," +
-                currentPrices.get("Cardamom");
+        return  prices.get("Cravinho") + "," +
+                prices.get("Cinnamon") + "," +
+                prices.get("Nutmeg") + "," +
+                prices.get("Cardamom");
     }
 
     private class GameStartBehaviour extends OneShotBehaviour {
@@ -112,42 +113,67 @@ public class BazaarAgent extends Agent {
         public void action() {
             resetStock();
 
-            // Get Stock
+            handleStockRequestsAndResponses(5000); // 5 seconds
 
-            // 1. Ask for stock from all participants
+            System.out.println(getLocalName() + " - Updated stock: " + stock);
+
+            // Update Prices
+            adjustPrices();
+            
+            // Broadcast Prices
+            broadcastPrices();
+
+            round_counter++;
+        }
+
+        private void handleStockRequestsAndResponses(long timeoutDuration) {
+            // 1. Send stock request to all participants
             ACLMessage requestStock = new ACLMessage(ACLMessage.REQUEST);
             requestStock.setContent("STOCK");
             for (AID participant : activeParticipants) {
                 requestStock.addReceiver(participant);
             }
-            myAgent.send(requestStock);
+            send(requestStock);
+            System.out.println(getLocalName() + " - Sent stock requests to all participants.");
 
-            // 2. Receive stock responses and update centralized stock
-            int responsesReceived = 0;
-            while (responsesReceived < activeParticipants.size()) {
-                ACLMessage reply = myAgent.blockingReceive();
+            // 2. Process responses with a timeout
+            List<AID> responsiveParticipants = new ArrayList<>();
+            long timeout = System.currentTimeMillis() + timeoutDuration;
+
+            while (System.currentTimeMillis() < timeout && responsiveParticipants.size() < activeParticipants.size()) {
+                ACLMessage reply = receive();
                 if (reply != null && reply.getPerformative() == ACLMessage.INFORM) {
-                    responsesReceived++;
-                    String content = reply.getContent();
-                    String[] stocks = content.split(",");
 
-                    stock.put("Cravinho", stock.get("Cravinho") + Integer.parseInt(stocks[0]));
-                    stock.put("Cinnamon", stock.get("Cinnamon") + Integer.parseInt(stocks[1]));
-                    stock.put("Nutmeg", stock.get("Nutmeg") + Integer.parseInt(stocks[2]));
-                    stock.put("Cardamom", stock.get("Cardamom") + Integer.parseInt(stocks[3]));
+                    // 2.1 On reply update stocks
+                    responsiveParticipants.add(reply.getSender());
+                    updateStock(reply);
+                } else if (reply == null) {
+                    block(100);
                 }
             }
 
-            System.out.println("Updated stock: " + stock);
+            // 2.2 Remove unresponsive participants
+            for (AID participant : new ArrayList<>(activeParticipants)) {
+                if (!responsiveParticipants.contains(participant)) {
+                    System.out.println(getLocalName() + " - Removing unresponsive participant: " + participant.getLocalName());
+                    activeParticipants.remove(participant);
+                }
+            }
+        }
 
+        private void updateStock(ACLMessage reply) {
+            String content = reply.getContent();
+            String[] stocks = content.split(",");
+    
+            stock.put("Cravinho", stock.get("Cravinho") + Integer.parseInt(stocks[0]));
+            stock.put("Cinnamon", stock.get("Cinnamon") + Integer.parseInt(stocks[1]));
+            stock.put("Nutmeg", stock.get("Nutmeg") + Integer.parseInt(stocks[2]));
+            stock.put("Cardamom", stock.get("Cardamom") + Integer.parseInt(stocks[3]));
+    
+            System.out.println(getLocalName() + " - Received stock from " + reply.getSender().getLocalName() + ": " + content);
+        }
 
-            // Update Prices
-
-            adjustPrices();
-            
-
-            // Broadcast Prices
-
+        private void broadcastPrices() {
             ACLMessage priceMessage = new ACLMessage(ACLMessage.INFORM);
             String priceInfo = getPricesAsCommaSeparatedString();
             priceMessage.setContent(priceInfo);
@@ -155,9 +181,7 @@ public class BazaarAgent extends Agent {
                 priceMessage.addReceiver(participant);
             }
             send(priceMessage);
-            System.out.println("Broadcasted prices to participants: " + priceInfo);
-
-            round_counter++;
+            System.out.println(getLocalName() + " - Broadcasted prices to participants: " + priceInfo);
         }
 
         public boolean done() {
@@ -166,7 +190,6 @@ public class BazaarAgent extends Agent {
     }
 
     private void adjustPrices() {
-        // Access centralized stock directly
         int cravinhoStock = stock.get("Cravinho");
         int cinnamonStock = stock.get("Cinnamon");
         int nutmegStock = stock.get("Nutmeg");
@@ -174,34 +197,34 @@ public class BazaarAgent extends Agent {
     
         // cravinho rare and valuable
         if (cravinhoStock < 10) {
-            currentPrices.put("Cravinho", currentPrices.get("Cravinho") + 10);
+            prices.put("Cravinho", prices.get("Cravinho") + 10);
         } else if (cravinhoStock > 30) {
-            currentPrices.put("Cravinho", Math.max(20, currentPrices.get("Cravinho") - 5));
+            prices.put("Cravinho", Math.max(20, prices.get("Cravinho") - 5));
         }
     
         // cinnamon stable
         if (cinnamonStock > 40) {
-            currentPrices.put("Cinnamon", Math.max(3, currentPrices.get("Cinnamon") - 1));
+            prices.put("Cinnamon", Math.max(3, prices.get("Cinnamon") - 1));
         } else if (cinnamonStock < 20) {
-            currentPrices.put("Cinnamon", currentPrices.get("Cinnamon") + 2);
+            prices.put("Cinnamon", prices.get("Cinnamon") + 2);
         }
     
         // nutmeg sensitive to demand
         if (nutmegStock < 15) {
-            currentPrices.put("Nutmeg", currentPrices.get("Nutmeg") + 10);
+            prices.put("Nutmeg", prices.get("Nutmeg") + 10);
         } else if (nutmegStock > 35) {
-            currentPrices.put("Nutmeg", Math.max(10, currentPrices.get("Nutmeg") - 5));
+            prices.put("Nutmeg", Math.max(10, prices.get("Nutmeg") - 5));
         }
     
         // cardamom volatile
         if (cardamomStock < 10) {
-            currentPrices.put("Cardamom", currentPrices.get("Cardamom") + 5);
+            prices.put("Cardamom", prices.get("Cardamom") + 5);
         } else if (cardamomStock > 40) {
-            currentPrices.put("Cardamom", Math.max(5, currentPrices.get("Cardamom") - 3));
+            prices.put("Cardamom", Math.max(5, prices.get("Cardamom") - 3));
         }
     
         // for debug
-        System.out.println("Updated spice prices: " + currentPrices);
+        System.out.println("Updated spice prices: " + prices);
     }
 
     private AID[] findAgentsByService(String serviceType) {

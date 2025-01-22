@@ -14,7 +14,7 @@ import java.util.Map;
 public class MerchantAgent extends Agent {
 
     private Map<String, Integer> stock;
-    private Map<String, Integer> currentPrices;
+    private Map<String, Integer> prices;
 
     protected void setup() {
         System.out.println("MerchantAgent" + getLocalName() + " started");
@@ -37,11 +37,11 @@ public class MerchantAgent extends Agent {
     }
 
     private void initializePrices() {
-        currentPrices = new HashMap<>();
-        currentPrices.put("Cravinho", 0);
-        currentPrices.put("Cinnamon", 0);
-        currentPrices.put("Nutmeg", 0);
-        currentPrices.put("Cardamom", 0);
+        prices = new HashMap<>();
+        prices.put("Cravinho", 0);
+        prices.put("Cinnamon", 0);
+        prices.put("Nutmeg", 0);
+        prices.put("Cardamom", 0);
     }
 
     private String getStockAsCommaSeparatedString() {
@@ -82,13 +82,13 @@ public class MerchantAgent extends Agent {
                     System.out
                             .println(getLocalName() + " received price update from " + msg.getSender().getLocalName());
 
-                    String[] prices = msg.getContent().split(",");
-                    currentPrices.put("Cravinho", Integer.parseInt(prices[0].trim()));
-                    currentPrices.put("Cinnamon", Integer.parseInt(prices[1].trim()));
-                    currentPrices.put("Nutmeg", Integer.parseInt(prices[2].trim()));
-                    currentPrices.put("Cardamom", Integer.parseInt(prices[3].trim()));
+                    String[] receivedPrices = msg.getContent().split(",");
+                    prices.put("Cravinho", Integer.parseInt(receivedPrices[0].trim()));
+                    prices.put("Cinnamon", Integer.parseInt(receivedPrices[1].trim()));
+                    prices.put("Nutmeg", Integer.parseInt(receivedPrices[2].trim()));
+                    prices.put("Cardamom", Integer.parseInt(receivedPrices[3].trim()));
 
-                    System.out.println(getLocalName() + " updated prices: " + currentPrices);
+                    System.out.println(getLocalName() + " updated prices: " + prices);
                 }
             } else {
                 block();
