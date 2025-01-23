@@ -2,6 +2,8 @@ package projectAgents;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.HashMap;
+import java.util.Map;
 
 import jade.core.AID;
 import jade.core.Agent;
@@ -9,34 +11,10 @@ import jade.domain.DFService;
 import jade.domain.FIPAException;
 import jade.domain.FIPAAgentManagement.DFAgentDescription;
 import jade.domain.FIPAAgentManagement.ServiceDescription;
-
-import java.util.HashMap;
-import java.util.Map;
-
 import jade.core.behaviours.OneShotBehaviour;
 import jade.core.behaviours.SequentialBehaviour;
 import jade.core.behaviours.SimpleBehaviour;
 import jade.lang.acl.ACLMessage;
-
-// ask for the object the player will use in that round
-// update scoreboard and next round prices
-
-// ?? example of a round
-// 1. Market update
-//  prices are announced (with associated coin value)
-//  events might have a probability of happening
-// 2. Exchanges and negotiations
-// between merchants
-// 3. Sale to the Market
-// agents decide so sell or hold
-// 4. Next round
-
-// merchants
-// arrive to market with limited stocks of spices
-// alert to profit opportunities and sabotagin rivals
-
-// prices of spices fluctuate based on demand and unexpected events
-// constant interaction, temporary alliances, betrayals
 
 public class BazaarAgent extends Agent {
 
@@ -56,8 +34,7 @@ public class BazaarAgent extends Agent {
         if (participantAgents != null && participantAgents.length > 0) {
             for (AID participant : participantAgents) {
                 activeParticipants.add(participant);
-                System.out.println("Participant agents:");
-                System.out.println(participant.getLocalName());
+                System.out.println("Participant agent: " + participant.getLocalName() + " joined the game");
             }
 
             SequentialBehaviour behaviour = new SequentialBehaviour(this);
@@ -85,23 +62,8 @@ public class BazaarAgent extends Agent {
         stock.put("Cardamom", 0);
     }
 
-    private void resetStock() {
-        stock.put("Cravinho", 0);
-        stock.put("Cinnamon", 0);
-        stock.put("Nutmeg", 0);
-        stock.put("Cardamom", 0);
-    }
-
-    private String getPricesAsCommaSeparatedString() {
-        return  prices.get("Cravinho") + "," +
-                prices.get("Cinnamon") + "," +
-                prices.get("Nutmeg") + "," +
-                prices.get("Cardamom");
-    }
-
     private class GameStartBehaviour extends OneShotBehaviour {
         public void action() {
-            // game start implementation
             System.out.println(getLocalName() + " - game is starting");
         }
     }
@@ -109,25 +71,36 @@ public class BazaarAgent extends Agent {
     private class RoundBehaviour extends SimpleBehaviour {
 
         int round_counter = 0;
+        private String nextRoundEventType = null;
+        private String nextRoundTarget = null;
 
         public void action() {
+            System.out.println("ROUND " + round_counter);
+
             resetStock();
 
-            handleStockRequestsAndResponses(5000); // 5 seconds
+            getStockFromMerchants();
 
-            System.out.println(getLocalName() + " - Updated stock: " + stock);
+            System.out.println(getLocalName() + " - updated stock: " + stock.toString());
 
-            // Update Prices
             adjustPrices();
-            
-            // Broadcast Prices
-            broadcastPrices();
+
+            determineNextRoundEvent();
+
+            broadcastPricesAndEvent();
 
             round_counter++;
         }
 
-        private void handleStockRequestsAndResponses(long timeoutDuration) {
-            // 1. Send stock request to all participants
+        private void resetStock() {
+            stock.put("Cravinho", 0);
+            stock.put("Cinnamon", 0);
+            stock.put("Nutmeg", 0);
+            stock.put("Cardamom", 0);
+            System.out.println(getLocalName() + " - Stock has been reset for the new round.");
+        }
+
+        private void getStockFromMerchants() {
             ACLMessage requestStock = new ACLMessage(ACLMessage.REQUEST);
             requestStock.setContent("STOCK");
             for (AID participant : activeParticipants) {
@@ -136,95 +109,157 @@ public class BazaarAgent extends Agent {
             send(requestStock);
             System.out.println(getLocalName() + " - Sent stock requests to all participants.");
 
-            // 2. Process responses with a timeout
-            List<AID> responsiveParticipants = new ArrayList<>();
-            long timeout = System.currentTimeMillis() + timeoutDuration;
+            int responsesReceived = 0;
 
-            while (System.currentTimeMillis() < timeout && responsiveParticipants.size() < activeParticipants.size()) {
-                ACLMessage reply = receive();
+            while (responsesReceived < activeParticipants.size()) {
+                ACLMessage reply = blockingReceive(); // wait for responses
                 if (reply != null && reply.getPerformative() == ACLMessage.INFORM) {
-
-                    // 2.1 On reply update stocks
-                    responsiveParticipants.add(reply.getSender());
+                    responsesReceived++;
                     updateStock(reply);
-                } else if (reply == null) {
-                    block(100);
+                }
+            }
+        }
+
+        // Adjust prices based on current stock levels and market size
+        private void adjustPrices() {
+            int marketFactor = activeParticipants.size();
+
+            int cravinhoStock = stock.get("Cravinho");
+            int cinnamonStock = stock.get("Cinnamon");
+            int nutmegStock = stock.get("Nutmeg");
+            int cardamomStock = stock.get("Cardamom");
+
+            // Cravinho - rare and valuable
+            if (cravinhoStock < 10 * marketFactor) {
+                prices.put("Cravinho", prices.get("Cravinho") + (10 / marketFactor));
+            } else if (cravinhoStock > 30 * marketFactor) {
+                prices.put("Cravinho", Math.max(20, prices.get("Cravinho") - (5 / marketFactor)));
+            }
+
+            // Cinnamon - stable
+            if (cinnamonStock > 40 * marketFactor) {
+                prices.put("Cinnamon", Math.max(3, prices.get("Cinnamon") - (1 / marketFactor)));
+            } else if (cinnamonStock < 20 * marketFactor) {
+                prices.put("Cinnamon", prices.get("Cinnamon") + (2 / marketFactor));
+            }
+
+            // Nutmeg - sensitive to demand
+            if (nutmegStock < 15 * marketFactor) {
+                prices.put("Nutmeg", prices.get("Nutmeg") + (10 / marketFactor));
+            } else if (nutmegStock > 35 * marketFactor) {
+                prices.put("Nutmeg", Math.max(10, prices.get("Nutmeg") - (5 / marketFactor)));
+            }
+
+            // Cardamom - volatile
+            if (cardamomStock < 10 * marketFactor) {
+                prices.put("Cardamom", prices.get("Cardamom") + (5 / marketFactor));
+            } else if (cardamomStock > 40 * marketFactor) {
+                prices.put("Cardamom", Math.max(5, prices.get("Cardamom") - (3 / marketFactor)));
+            }
+
+            // Adjust prices based on event
+            if (nextRoundEventType != null) {
+                switch (nextRoundEventType) {
+                    case "SULTAN_TAX":
+                        // Increase all prices due to Sultan's tax
+                        for (Map.Entry<String, Integer> entry : prices.entrySet()) {
+                            prices.put(entry.getKey(), (int) (entry.getValue() * 1.1)); // 10% increase
+                        }
+                        System.out.println(getLocalName() + " - Sultan's Tax: Increased all prices by 10%.");
+                        break;
+
+                    case "TRADE_ROUTE":
+                        // Decrease price of the affected spice due to a new trade route
+                        if (nextRoundTarget != null) {
+                            int currentPrice = prices.get(nextRoundTarget);
+                            prices.put(nextRoundTarget, (int) (currentPrice * 0.8)); // 20% decrease
+                            System.out.println(getLocalName() + " - Trade Route: Decreased price of " + nextRoundTarget
+                                    + " by 20%.");
+                        }
+                        break;
+
+                    default:
+                        break;
                 }
             }
 
-            // 2.2 Remove unresponsive participants
-            for (AID participant : new ArrayList<>(activeParticipants)) {
-                if (!responsiveParticipants.contains(participant)) {
-                    System.out.println(getLocalName() + " - Removing unresponsive participant: " + participant.getLocalName());
-                    activeParticipants.remove(participant);
-                }
-            }
+            System.out.println(
+                    getLocalName() + " - Adjusted prices considering market size (" + marketFactor + "): " + prices);
         }
 
         private void updateStock(ACLMessage reply) {
             String content = reply.getContent();
             String[] stocks = content.split(",");
-    
+
             stock.put("Cravinho", stock.get("Cravinho") + Integer.parseInt(stocks[0]));
             stock.put("Cinnamon", stock.get("Cinnamon") + Integer.parseInt(stocks[1]));
             stock.put("Nutmeg", stock.get("Nutmeg") + Integer.parseInt(stocks[2]));
             stock.put("Cardamom", stock.get("Cardamom") + Integer.parseInt(stocks[3]));
-    
-            System.out.println(getLocalName() + " - Received stock from " + reply.getSender().getLocalName() + ": " + content);
         }
 
-        private void broadcastPrices() {
-            ACLMessage priceMessage = new ACLMessage(ACLMessage.INFORM);
-            String priceInfo = getPricesAsCommaSeparatedString();
-            priceMessage.setContent(priceInfo);
-            for (AID participant : activeParticipants) {
-                priceMessage.addReceiver(participant);
+        private void broadcastPricesAndEvent() {
+            StringBuilder messageContent = new StringBuilder();
+            messageContent.append("PRICES,").append(getPricesAsCommaSeparatedString());
+
+            messageContent.append("|EVENT,");
+            if (nextRoundEventType == null) {
+                messageContent.append("No significant events.");
+            } else {
+                switch (nextRoundEventType) {
+                    case "STORM":
+                        messageContent.append("A storm destroyed " + nextRoundTarget
+                                + " plantations: the price will increase in the next round.");
+                        break;
+                    case "SULTAN_TAX":
+                        messageContent.append(
+                                "The Sultan has imposed a new tax: all prices will increase in the next round.");
+                        break;
+                    case "TRADE_ROUTE":
+                        messageContent.append("A new trade route has been discovered for " + nextRoundTarget
+                                + ": the price will decrease in the next round.");
+                        break;
+                }
             }
-            send(priceMessage);
-            System.out.println(getLocalName() + " - Broadcasted prices to participants: " + priceInfo);
+
+            // Send the message to all active participants
+            ACLMessage broadcastMessage = new ACLMessage(ACLMessage.INFORM);
+            broadcastMessage.setContent(messageContent.toString());
+            for (AID participant : activeParticipants) {
+                broadcastMessage.addReceiver(participant);
+            }
+            send(broadcastMessage);
+            System.out.println(getLocalName() + " - Broadcasted prices and event to participants: " + messageContent);
+        }
+
+        private void determineNextRoundEvent() {
+            double eventProbability = Math.random();
+            if (eventProbability < 0.15) {
+                nextRoundEventType = "STORM";
+                nextRoundTarget = pickRandomSpice();
+            } else if (eventProbability < 0.30) {
+                nextRoundEventType = "SULTAN_TAX";
+            } else if (eventProbability < 0.45) {
+                nextRoundEventType = "TRADE_ROUTE";
+                nextRoundTarget = pickRandomSpice();
+            } else {
+                nextRoundEventType = null;
+                nextRoundTarget = null;
+            }
+        }
+
+        private String pickRandomSpice() {
+            String[] spices = { "Cravinho", "Cinnamon", "Nutmeg", "Cardamom" };
+            return spices[(int) (Math.random() * spices.length)];
+        }
+
+        private String getPricesAsCommaSeparatedString() {
+            return prices.get("Cravinho") + "," + prices.get("Cinnamon") + "," + prices.get("Nutmeg") + ","
+                    + prices.get("Cardamom");
         }
 
         public boolean done() {
             return round_counter >= TOTAL_ROUNDS;
         }
-    }
-
-    private void adjustPrices() {
-        int cravinhoStock = stock.get("Cravinho");
-        int cinnamonStock = stock.get("Cinnamon");
-        int nutmegStock = stock.get("Nutmeg");
-        int cardamomStock = stock.get("Cardamom");
-    
-        // cravinho rare and valuable
-        if (cravinhoStock < 10) {
-            prices.put("Cravinho", prices.get("Cravinho") + 10);
-        } else if (cravinhoStock > 30) {
-            prices.put("Cravinho", Math.max(20, prices.get("Cravinho") - 5));
-        }
-    
-        // cinnamon stable
-        if (cinnamonStock > 40) {
-            prices.put("Cinnamon", Math.max(3, prices.get("Cinnamon") - 1));
-        } else if (cinnamonStock < 20) {
-            prices.put("Cinnamon", prices.get("Cinnamon") + 2);
-        }
-    
-        // nutmeg sensitive to demand
-        if (nutmegStock < 15) {
-            prices.put("Nutmeg", prices.get("Nutmeg") + 10);
-        } else if (nutmegStock > 35) {
-            prices.put("Nutmeg", Math.max(10, prices.get("Nutmeg") - 5));
-        }
-    
-        // cardamom volatile
-        if (cardamomStock < 10) {
-            prices.put("Cardamom", prices.get("Cardamom") + 5);
-        } else if (cardamomStock > 40) {
-            prices.put("Cardamom", Math.max(5, prices.get("Cardamom") - 3));
-        }
-    
-        // for debug
-        System.out.println("Updated spice prices: " + prices);
     }
 
     private AID[] findAgentsByService(String serviceType) {

@@ -17,7 +17,7 @@ public class MerchantAgent extends Agent {
     private Map<String, Integer> prices;
 
     protected void setup() {
-        System.out.println("MerchantAgent" + getLocalName() + " started");
+        System.out.println("MerchantAgent " + getLocalName() + " started");
 
         initializeStock();
         initializePrices();
@@ -25,7 +25,7 @@ public class MerchantAgent extends Agent {
         registerInDF("market", "market-service");
 
         addBehaviour(new StockRequestHandler());
-        addBehaviour(new PriceUpdateHandler());
+        addBehaviour(new BroadcastHandler());
     }
 
     private void initializeStock() {
@@ -57,15 +57,12 @@ public class MerchantAgent extends Agent {
             ACLMessage msg = myAgent.receive();
             if (msg != null) {
                 if (msg.getPerformative() == ACLMessage.REQUEST && "STOCK".equals(msg.getContent())) {
-                    System.out
-                            .println(getLocalName() + " received stock request from " + msg.getSender().getLocalName());
-
                     ACLMessage reply = msg.createReply();
                     reply.setPerformative(ACLMessage.INFORM);
                     reply.setContent(getStockAsCommaSeparatedString());
                     myAgent.send(reply);
 
-                    System.out.println(getLocalName() + " sent stock details: " + getStockAsCommaSeparatedString());
+                    System.out.println(getLocalName() + " - sent stock details: " + getStockAsCommaSeparatedString());
                 }
             } else {
                 block();
@@ -73,22 +70,26 @@ public class MerchantAgent extends Agent {
         }
     }
 
-    private class PriceUpdateHandler extends CyclicBehaviour {
+    private class BroadcastHandler extends CyclicBehaviour {
         @Override
         public void action() {
             ACLMessage msg = myAgent.receive();
             if (msg != null) {
-                if (msg.getPerformative() == ACLMessage.INFORM) {
-                    System.out
-                            .println(getLocalName() + " received price update from " + msg.getSender().getLocalName());
+                if (msg.getPerformative() == ACLMessage.INFORM && msg.getContent().startsWith("PRICES,")) {
+                    System.out.println(getLocalName() + " received broadcast: " + msg.getContent());
 
-                    String[] receivedPrices = msg.getContent().split(",");
+                    String[] parts = msg.getContent().split("\\|");
+                    String pricesPart = parts[0].replace("PRICES,", "").trim();
+                    String eventPart = parts[1].replace("EVENT,", "").trim();
+
+                    String[] receivedPrices = pricesPart.split(",");
                     prices.put("Cravinho", Integer.parseInt(receivedPrices[0].trim()));
                     prices.put("Cinnamon", Integer.parseInt(receivedPrices[1].trim()));
                     prices.put("Nutmeg", Integer.parseInt(receivedPrices[2].trim()));
                     prices.put("Cardamom", Integer.parseInt(receivedPrices[3].trim()));
 
                     System.out.println(getLocalName() + " updated prices: " + prices);
+                    System.out.println(getLocalName() + " noticed event: " + eventPart);
                 }
             } else {
                 block();
@@ -120,5 +121,4 @@ public class MerchantAgent extends Agent {
         }
         System.out.println(getLocalName() + " - terminating.");
     }
-
 }
