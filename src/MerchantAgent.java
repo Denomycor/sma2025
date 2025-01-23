@@ -77,19 +77,28 @@ public class MerchantAgent extends Agent {
             if (msg != null) {
                 if (msg.getPerformative() == ACLMessage.INFORM && msg.getContent().startsWith("PRICES,")) {
                     System.out.println(getLocalName() + " received broadcast: " + msg.getContent());
-
+    
+                    // Process the prices and event information
                     String[] parts = msg.getContent().split("\\|");
                     String pricesPart = parts[0].replace("PRICES,", "").trim();
                     String eventPart = parts[1].replace("EVENT,", "").trim();
-
+    
+                    // Update local prices
                     String[] receivedPrices = pricesPart.split(",");
                     prices.put("Cravinho", Integer.parseInt(receivedPrices[0].trim()));
                     prices.put("Cinnamon", Integer.parseInt(receivedPrices[1].trim()));
                     prices.put("Nutmeg", Integer.parseInt(receivedPrices[2].trim()));
                     prices.put("Cardamom", Integer.parseInt(receivedPrices[3].trim()));
-
+    
                     System.out.println(getLocalName() + " updated prices: " + prices);
                     System.out.println(getLocalName() + " noticed event: " + eventPart);
+    
+                    // Send ACK back to the BazaarAgent
+                    ACLMessage ack = msg.createReply();
+                    ack.setPerformative(ACLMessage.CONFIRM);
+                    ack.setContent("ACK");
+                    myAgent.send(ack);
+                    System.out.println(getLocalName() + " - Sent ACK to " + msg.getSender().getLocalName());
                 }
             } else {
                 block();
@@ -106,7 +115,7 @@ public class MerchantAgent extends Agent {
         dfd.addServices(sd);
         try {
             DFService.register(this, dfd);
-            System.out.println(getLocalName() + "- registered with the DF as a " + serviceType + " agent.");
+            System.out.println(getLocalName() + " - registered with the DF as a " + serviceType + " agent.");
         } catch (FIPAException fe) {
             fe.printStackTrace();
         }

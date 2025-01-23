@@ -183,8 +183,8 @@ public class BazaarAgent extends Agent {
                 }
             }
 
-            System.out.println(
-                    getLocalName() + " - Adjusted prices considering market size (" + marketFactor + "): " + prices);
+            System.out.println(getLocalName() + " - Adjusted prices considering market size (" + marketFactor
+                    + "):  and stock " + prices);
         }
 
         private void updateStock(ACLMessage reply) {
@@ -229,6 +229,17 @@ public class BazaarAgent extends Agent {
             }
             send(broadcastMessage);
             System.out.println(getLocalName() + " - Broadcasted prices and event to participants: " + messageContent);
+
+            // Wait for ACK messages from all participants
+            int ackReceived = 0;
+            while (ackReceived < activeParticipants.size()) {
+                ACLMessage reply = blockingReceive(); // Blocking until an ACK is received
+                if (reply != null && reply.getPerformative() == ACLMessage.CONFIRM) {
+                    ackReceived++;
+                    System.out.println(getLocalName() + " - Received ACK from " + reply.getSender().getLocalName());
+                }
+            }
+            System.out.println(getLocalName() + " - All participants acknowledged the broadcast.");
         }
 
         private void determineNextRoundEvent() {
