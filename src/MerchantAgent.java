@@ -15,6 +15,7 @@ public class MerchantAgent extends Agent {
 
     private Map<String, Integer> stock;
     private Map<String, Integer> prices;
+    private String stormAffectedSpice = null;
 
     protected void setup() {
         System.out.println("MerchantAgent " + getLocalName() + " started");
@@ -24,8 +25,7 @@ public class MerchantAgent extends Agent {
 
         registerInDF("market", "market-service");
 
-        addBehaviour(new StockRequestHandler());
-        addBehaviour(new BroadcastHandler());
+        addBehaviour(new MessageHandler());
     }
 
     private void initializeStock() {
@@ -51,58 +51,64 @@ public class MerchantAgent extends Agent {
                 stock.get("Cardamom");
     }
 
-    private class StockRequestHandler extends CyclicBehaviour {
+    private void applyStormImpact() {
+        if (stormAffectedSpice != null) {
+            int currentStock = stock.get(stormAffectedSpice);
+            int reducedStock = Math.max(0, currentStock / 2); // Reduce stock by 50%
+            stock.put(stormAffectedSpice, reducedStock);
+            System.out.println(getLocalName() + " - Storm reduced " + stormAffectedSpice + " stock to " + reducedStock);
+            stormAffectedSpice = null; // Reset the flag
+        }
+    }
+
+
+    private class MessageHandler extends CyclicBehaviour {
         @Override
         public void action() {
             ACLMessage msg = myAgent.receive();
             if (msg != null) {
                 if (msg.getPerformative() == ACLMessage.REQUEST && "STOCK".equals(msg.getContent())) {
+                    // Apply storm
+                    applyStormImpact();
+
                     ACLMessage reply = msg.createReply();
                     reply.setPerformative(ACLMessage.INFORM);
                     reply.setContent(getStockAsCommaSeparatedString());
                     myAgent.send(reply);
-
-                    System.out.println(getLocalName() + " - sent stock details: " + getStockAsCommaSeparatedString());
+                    System.out.println(getLocalName() + " - Sent stock details: " + getStockAsCommaSeparatedString());
+                } else if (msg.getPerformative() == ACLMessage.INFORM && msg.getContent().startsWith("PRICES,")) {
+                    // Handle broadcast
+                    processBroadcast(msg);
                 }
             } else {
                 block();
             }
         }
-    }
 
-    private class BroadcastHandler extends CyclicBehaviour {
-        @Override
-        public void action() {
-            ACLMessage msg = myAgent.receive();
-            if (msg != null) {
-                if (msg.getPerformative() == ACLMessage.INFORM && msg.getContent().startsWith("PRICES,")) {
-                    System.out.println(getLocalName() + " received broadcast: " + msg.getContent());
-    
-                    // Process the prices and event information
-                    String[] parts = msg.getContent().split("\\|");
-                    String pricesPart = parts[0].replace("PRICES,", "").trim();
-                    String eventPart = parts[1].replace("EVENT,", "").trim();
-    
-                    // Update local prices
-                    String[] receivedPrices = pricesPart.split(",");
-                    prices.put("Cravinho", Integer.parseInt(receivedPrices[0].trim()));
-                    prices.put("Cinnamon", Integer.parseInt(receivedPrices[1].trim()));
-                    prices.put("Nutmeg", Integer.parseInt(receivedPrices[2].trim()));
-                    prices.put("Cardamom", Integer.parseInt(receivedPrices[3].trim()));
-    
-                    System.out.println(getLocalName() + " updated prices: " + prices);
-                    System.out.println(getLocalName() + " noticed event: " + eventPart);
-    
-                    // Send ACK back to the BazaarAgent
-                    ACLMessage ack = msg.createReply();
-                    ack.setPerformative(ACLMessage.CONFIRM);
-                    ack.setContent("ACK");
-                    myAgent.send(ack);
-                    System.out.println(getLocalName() + " - Sent ACK to " + msg.getSender().getLocalName());
-                }
-            } else {
-                block();
+        private void processBroadcast(ACLMessage msg) {
+            String[] parts = msg.getContent().split("\\|");
+            String pricesPart = parts[0].replace("PRICES,", "").trim();
+            String eventPart = parts[1].replace("EVENT,", "").trim();
+
+            // Update local prices
+            String[] receivedPrices = pricesPart.split(",");
+            prices.put("Cravinho", Integer.parseInt(receivedPrices[0].trim()));
+            prices.put("Cinnamon", Integer.parseInt(receivedPrices[1].trim()));
+            prices.put("Nutmeg", Integer.parseInt(receivedPrices[2].trim()));
+            prices.put("Cardamom", Integer.parseInt(receivedPrices[3].trim()));
+
+            // Check for a storm event and update affected spice
+            if (eventPart.startsWith("A storm destroyed")) {
+                String[] eventDetails = eventPart.split(" ");
+                stormAffectedSpice = eventDetails[3];
+                System.out.println(getLocalName() + " - Storm will impact " + stormAffectedSpice + " stock in the next round.");
             }
+
+            // Send ACK back
+            ACLMessage ack = msg.createReply();
+            ack.setPerformative(ACLMessage.CONFIRM);
+            ack.setContent("ACK");
+            myAgent.send(ack);
         }
     }
 

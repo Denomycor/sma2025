@@ -85,6 +85,8 @@ public class BazaarAgent extends Agent {
 
             adjustPrices();
 
+            System.out.println(getLocalName() + " - updated prices: " + prices.toString());
+
             determineNextRoundEvent();
 
             broadcastPricesAndEvent();
@@ -97,7 +99,6 @@ public class BazaarAgent extends Agent {
             stock.put("Cinnamon", 0);
             stock.put("Nutmeg", 0);
             stock.put("Cardamom", 0);
-            System.out.println(getLocalName() + " - Stock has been reset for the new round.");
         }
 
         private void getStockFromMerchants() {
@@ -107,7 +108,6 @@ public class BazaarAgent extends Agent {
                 requestStock.addReceiver(participant);
             }
             send(requestStock);
-            System.out.println(getLocalName() + " - Sent stock requests to all participants.");
 
             int responsesReceived = 0;
 
@@ -165,7 +165,6 @@ public class BazaarAgent extends Agent {
                         for (Map.Entry<String, Integer> entry : prices.entrySet()) {
                             prices.put(entry.getKey(), (int) (entry.getValue() * 1.1)); // 10% increase
                         }
-                        System.out.println(getLocalName() + " - Sultan's Tax: Increased all prices by 10%.");
                         break;
 
                     case "TRADE_ROUTE":
@@ -173,8 +172,6 @@ public class BazaarAgent extends Agent {
                         if (nextRoundTarget != null) {
                             int currentPrice = prices.get(nextRoundTarget);
                             prices.put(nextRoundTarget, (int) (currentPrice * 0.8)); // 20% decrease
-                            System.out.println(getLocalName() + " - Trade Route: Decreased price of " + nextRoundTarget
-                                    + " by 20%.");
                         }
                         break;
 
@@ -182,9 +179,6 @@ public class BazaarAgent extends Agent {
                         break;
                 }
             }
-
-            System.out.println(getLocalName() + " - Adjusted prices considering market size (" + marketFactor
-                    + "):  and stock " + prices);
         }
 
         private void updateStock(ACLMessage reply) {
@@ -228,7 +222,7 @@ public class BazaarAgent extends Agent {
                 broadcastMessage.addReceiver(participant);
             }
             send(broadcastMessage);
-            System.out.println(getLocalName() + " - Broadcasted prices and event to participants: " + messageContent);
+            System.out.println(getLocalName() + " - " + messageContent);
 
             // Wait for ACK messages from all participants
             int ackReceived = 0;
@@ -236,7 +230,6 @@ public class BazaarAgent extends Agent {
                 ACLMessage reply = blockingReceive(); // Blocking until an ACK is received
                 if (reply != null && reply.getPerformative() == ACLMessage.CONFIRM) {
                     ackReceived++;
-                    System.out.println(getLocalName() + " - Received ACK from " + reply.getSender().getLocalName());
                 }
             }
             System.out.println(getLocalName() + " - All participants acknowledged the broadcast.");
