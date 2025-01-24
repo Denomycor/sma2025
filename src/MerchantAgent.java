@@ -19,6 +19,11 @@ public class MerchantAgent extends Agent {
     private int totalRounds = 0;
     private int currentRound = 0;
 
+    // agents with diffrent risk factors (0.1, 0.5, 0.9)
+    private double riskFactor = 1.0;
+    // riskFactor closer to 0, it values immediate returns over potential future gains 
+    // riskFactor closer to 1, it values potential future gains over immediate returns
+
     protected void setup() {
         System.out.println("MerchantAgent " + getLocalName() + " started");
 
@@ -63,6 +68,55 @@ public class MerchantAgent extends Agent {
         }
     }
 
+    private double calculateRawUtilitySell(String spice) {
+        int currentPrice = prices.get(spice);
+        double expectedPrice = predictExpectedPrice(spice);
+        double roundWeight = (double) currentRound / totalRounds;
+    
+        return (currentPrice * (1 - riskFactor)) + (roundWeight * expectedPrice * (1 - riskFactor));
+    }
+    
+    private double calculateRawUtilityHold(String spice) {
+        double expectedPrice = predictExpectedPrice(spice);
+    
+        return expectedPrice * (1 + riskFactor);
+    }
+
+    private double predictExpectedPrice(String spice) {
+        int currentPrice = prices.get(spice);
+
+        // to be completed
+    
+        // example
+        double priceChangeFactor = 1.1;
+        if (stormAffectedSpice != null && stormAffectedSpice.equals(spice)) {
+            priceChangeFactor = 1.2;
+        }
+    
+        return currentPrice * priceChangeFactor;
+    }
+
+    private double normalizeUtilitySell(String spice) {
+        double utilitySell = calculateRawUtilitySell(spice);
+        double utilityHold = calculateRawUtilityHold(spice);
+        return utilitySell / (utilitySell + utilityHold);
+    }
+    
+    private double normalizeUtilityHold(String spice) {
+        double utilitySell = calculateRawUtilitySell(spice);
+        double utilityHold = calculateRawUtilityHold(spice);
+        return utilityHold / (utilitySell + utilityHold);
+    }
+
+    private int decideQuantityToSell(String spice) {
+        double normalizedSell = normalizeUtilitySell(spice);
+        return (int) Math.round(normalizedSell * stock.get(spice));
+    }
+    
+    private int decideQuantityToHold(String spice) {
+        double normalizedHold = normalizeUtilityHold(spice);
+        return (int) Math.round(normalizedHold * stock.get(spice));
+    }
 
     private class MessageHandler extends CyclicBehaviour {
         @Override
