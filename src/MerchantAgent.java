@@ -15,13 +15,16 @@ public class MerchantAgent extends Agent {
 
     private Map<String, Integer> stock;
     private Map<String, Integer> prices;
-    private String stormAffectedSpice = null;
+
+    private String nextRoundEvent = null;
+    private String nextRoundTarget = null;
+
     private int totalRounds = 0;
     private int currentRound = 0;
 
     // agents with diffrent risk factors (0.1, 0.5, 0.9)
     private double riskFactor = 1.0;
-    // riskFactor closer to 0, it values immediate returns over potential future gains 
+    // riskFactor closer to 0, it values immediate returns over potential future gains
     // riskFactor closer to 1, it values potential future gains over immediate returns
 
     protected void setup() {
@@ -59,12 +62,13 @@ public class MerchantAgent extends Agent {
     }
 
     private void applyStormImpact() {
-        if (stormAffectedSpice != null) {
-            int currentStock = stock.get(stormAffectedSpice);
+        if ("STORM".equals(nextRoundEvent) && nextRoundTarget != null) {
+            int currentStock = stock.get(nextRoundTarget);
             int reducedStock = Math.max(0, currentStock / 2); // Reduce stock by 50%
-            stock.put(stormAffectedSpice, reducedStock);
-            System.out.println(getLocalName() + " - Storm reduced " + stormAffectedSpice + " stock to " + reducedStock);
-            stormAffectedSpice = null; // Reset the flag
+            stock.put(nextRoundTarget, reducedStock);
+            System.out.println(getLocalName() + " - Storm reduced " + nextRoundTarget + " stock to " + reducedStock);
+            nextRoundEvent = null;
+            nextRoundTarget = null;
         }
     }
 
@@ -72,13 +76,13 @@ public class MerchantAgent extends Agent {
         int currentPrice = prices.get(spice);
         double expectedPrice = predictExpectedPrice(spice);
         double roundWeight = (double) currentRound / totalRounds;
-    
+
         return (currentPrice * (1 - riskFactor)) + (roundWeight * expectedPrice * (1 - riskFactor));
     }
-    
+
     private double calculateRawUtilityHold(String spice) {
         double expectedPrice = predictExpectedPrice(spice);
-    
+
         return expectedPrice * (1 + riskFactor);
     }
 
@@ -86,13 +90,10 @@ public class MerchantAgent extends Agent {
         int currentPrice = prices.get(spice);
 
         // to be completed
-    
+
         // example
         double priceChangeFactor = 1.1;
-        if (stormAffectedSpice != null && stormAffectedSpice.equals(spice)) {
-            priceChangeFactor = 1.2;
-        }
-    
+
         return currentPrice * priceChangeFactor;
     }
 
@@ -101,7 +102,7 @@ public class MerchantAgent extends Agent {
         double utilityHold = calculateRawUtilityHold(spice);
         return utilitySell / (utilitySell + utilityHold);
     }
-    
+
     private double normalizeUtilityHold(String spice) {
         double utilitySell = calculateRawUtilitySell(spice);
         double utilityHold = calculateRawUtilityHold(spice);
@@ -112,7 +113,7 @@ public class MerchantAgent extends Agent {
         double normalizedSell = normalizeUtilitySell(spice);
         return (int) Math.round(normalizedSell * stock.get(spice));
     }
-    
+
     private int decideQuantityToHold(String spice) {
         double normalizedHold = normalizeUtilityHold(spice);
         return (int) Math.round(normalizedHold * stock.get(spice));
@@ -138,14 +139,14 @@ public class MerchantAgent extends Agent {
                         processBroadcast(msg);
                     } else if (msg.getContent().startsWith("TOTAL_ROUNDS")) {
                         totalRounds = Integer.parseInt(msg.getContent().split("=")[1]);
-    
+
                         ACLMessage ack = msg.createReply();
                         ack.setPerformative(ACLMessage.CONFIRM);
                         ack.setContent("ACK");
                         myAgent.send(ack);
                     } else if (msg.getContent().startsWith("CURRENT_ROUND")) {
                         currentRound = Integer.parseInt(msg.getContent().split("=")[1]);
-    
+
                         ACLMessage ack = msg.createReply();
                         ack.setPerformative(ACLMessage.CONFIRM);
                         ack.setContent("ACK");
@@ -169,18 +170,32 @@ public class MerchantAgent extends Agent {
             prices.put("Nutmeg", Integer.parseInt(receivedPrices[2].trim()));
             prices.put("Cardamom", Integer.parseInt(receivedPrices[3].trim()));
 
-            // Check for a storm event and update affected spice
+            // Determine nextRoundEvent and nextRoundTarget
             if (eventPart.startsWith("A storm destroyed")) {
-                String[] eventDetails = eventPart.split(" ");
-                stormAffectedSpice = eventDetails[3];
-                System.out.println(getLocalName() + " - Storm will impact " + stormAffectedSpice + " stock in the next round.");
+                nextRoundEvent = "STORM";
+                nextRoundTarget = eventPart.split(" ")[3];
+                System.out.println(getLocalName() + " - Next round event: STORM on " + nextRoundTarget);
+            } else if (eventPart.startsWith("The Sultan has imposed a new tax")) {
+                nextRoundEvent = "SULTAN_TAX";
+                nextRoundTarget = null;
+                System.out.println(getLocalName() + " - Next round event: SULTAN_TAX");
+            } else if (eventPart.startsWith("A new trade route")) {
+                nextRoundEvent = "TRADE_ROUTE";
+                nextRoundTarget = eventPart.split(" ")[8];
+                System.out.println(getLocalName() + " - Next round event: TRADE_ROUTE for " + nextRoundTarget);
+            } else {
+                nextRoundEvent = null;
+                nextRoundTarget = null;
+                System.out.println(getLocalName() + " - Next round event: No significant event.");
             }
 
+            // Send ACK back
             ACLMessage ack = msg.createReply();
             ack.setPerformative(ACLMessage.CONFIRM);
             ack.setContent("ACK");
             myAgent.send(ack);
         }
+
     }
 
     private void registerInDF(String serviceType, String serviceName) {

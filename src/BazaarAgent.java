@@ -92,7 +92,7 @@ public class BazaarAgent extends Agent {
 
         public void action() {
             System.out.println("ROUND " + round_counter);
-            
+
             broadcastCurrentRound(round_counter);
 
             resetStock();
@@ -119,7 +119,7 @@ public class BazaarAgent extends Agent {
                 currentRoundMessage.addReceiver(participant);
             }
             send(currentRoundMessage);
-    
+
             // Wait for ACKs from all merchants
             int ackReceived = 0;
             while (ackReceived < activeParticipants.size()) {
@@ -246,7 +246,7 @@ public class BazaarAgent extends Agent {
                         break;
                     case "TRADE_ROUTE":
                         messageContent.append("A new trade route has been discovered for " + nextRoundTarget
-                                + ": the price will decrease in the next round.");
+                                + " : the price will decrease in the next round.");
                         break;
                 }
             }
