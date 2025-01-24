@@ -16,6 +16,8 @@ public class MerchantAgent extends Agent {
     private Map<String, Integer> stock;
     private Map<String, Integer> prices;
     private String stormAffectedSpice = null;
+    private int totalRounds = 0;
+    private int currentRound = 0;
 
     protected void setup() {
         System.out.println("MerchantAgent " + getLocalName() + " started");
@@ -76,9 +78,25 @@ public class MerchantAgent extends Agent {
                     reply.setContent(getStockAsCommaSeparatedString());
                     myAgent.send(reply);
                     System.out.println(getLocalName() + " - Sent stock details: " + getStockAsCommaSeparatedString());
-                } else if (msg.getPerformative() == ACLMessage.INFORM && msg.getContent().startsWith("PRICES,")) {
-                    // Handle broadcast
-                    processBroadcast(msg);
+                } else if (msg.getPerformative() == ACLMessage.INFORM) {
+                    if (msg.getContent().startsWith("PRICES,")) {
+                        // Process Broadcast
+                        processBroadcast(msg);
+                    } else if (msg.getContent().startsWith("TOTAL_ROUNDS")) {
+                        totalRounds = Integer.parseInt(msg.getContent().split("=")[1]);
+    
+                        ACLMessage ack = msg.createReply();
+                        ack.setPerformative(ACLMessage.CONFIRM);
+                        ack.setContent("ACK");
+                        myAgent.send(ack);
+                    } else if (msg.getContent().startsWith("CURRENT_ROUND")) {
+                        currentRound = Integer.parseInt(msg.getContent().split("=")[1]);
+    
+                        ACLMessage ack = msg.createReply();
+                        ack.setPerformative(ACLMessage.CONFIRM);
+                        ack.setContent("ACK");
+                        myAgent.send(ack);
+                    }
                 }
             } else {
                 block();
@@ -104,7 +122,6 @@ public class MerchantAgent extends Agent {
                 System.out.println(getLocalName() + " - Storm will impact " + stormAffectedSpice + " stock in the next round.");
             }
 
-            // Send ACK back
             ACLMessage ack = msg.createReply();
             ack.setPerformative(ACLMessage.CONFIRM);
             ack.setContent("ACK");

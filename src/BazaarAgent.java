@@ -65,6 +65,22 @@ public class BazaarAgent extends Agent {
     private class GameStartBehaviour extends OneShotBehaviour {
         public void action() {
             System.out.println(getLocalName() + " - game is starting");
+            System.out.println("TOTAL_ROUNDS " + TOTAL_ROUNDS);
+
+            ACLMessage totalRoundsMessage = new ACLMessage(ACLMessage.INFORM);
+            totalRoundsMessage.setContent("TOTAL_ROUNDS=" + TOTAL_ROUNDS);
+            for (AID participant : activeParticipants) {
+                totalRoundsMessage.addReceiver(participant);
+            }
+            send(totalRoundsMessage);
+
+            int ackReceived = 0;
+            while (ackReceived < activeParticipants.size()) {
+                ACLMessage reply = blockingReceive();
+                if (reply != null && reply.getPerformative() == ACLMessage.CONFIRM) {
+                    ackReceived++;
+                }
+            }
         }
     }
 
@@ -76,6 +92,8 @@ public class BazaarAgent extends Agent {
 
         public void action() {
             System.out.println("ROUND " + round_counter);
+            
+            broadcastCurrentRound(round_counter);
 
             resetStock();
 
@@ -92,6 +110,24 @@ public class BazaarAgent extends Agent {
             broadcastPricesAndEvent();
 
             round_counter++;
+        }
+
+        private void broadcastCurrentRound(int currentRound) {
+            ACLMessage currentRoundMessage = new ACLMessage(ACLMessage.INFORM);
+            currentRoundMessage.setContent("CURRENT_ROUND=" + currentRound);
+            for (AID participant : activeParticipants) {
+                currentRoundMessage.addReceiver(participant);
+            }
+            send(currentRoundMessage);
+    
+            // Wait for ACKs from all merchants
+            int ackReceived = 0;
+            while (ackReceived < activeParticipants.size()) {
+                ACLMessage reply = blockingReceive(); // Blocking until an ACK is received
+                if (reply != null && reply.getPerformative() == ACLMessage.CONFIRM) {
+                    ackReceived++;
+                }
+            }
         }
 
         private void resetStock() {
