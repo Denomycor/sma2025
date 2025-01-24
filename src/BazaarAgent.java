@@ -197,11 +197,11 @@ public class BazaarAgent extends Agent {
             if (nextRoundEventType != null) {
                 switch (nextRoundEventType) {
                     case "SULTAN_TAX":
-                        // Increase all prices due to Sultan's tax
-                        for (Map.Entry<String, Integer> entry : prices.entrySet()) {
-                            prices.put(entry.getKey(), (int) (entry.getValue() * 1.1)); // 10% increase
-                        }
-                        break;
+                    // Decrease all prices due to Sultan's tax
+                    for (Map.Entry<String, Integer> entry : prices.entrySet()) {
+                        prices.put(entry.getKey(), Math.max(1, (int) (entry.getValue() * 0.9))); // 10% decrease, with a floor of 1
+                    }
+                    break;
 
                     case "TRADE_ROUTE":
                         // Decrease price of the affected spice due to a new trade route

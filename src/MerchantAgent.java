@@ -24,8 +24,10 @@ public class MerchantAgent extends Agent {
 
     // agents with diffrent risk factors (0.1, 0.5, 0.9)
     private double riskFactor = 1.0;
-    // riskFactor closer to 0, it values immediate returns over potential future gains
-    // riskFactor closer to 1, it values potential future gains over immediate returns
+    // riskFactor closer to 0, it values immediate returns over potential future
+    // gains
+    // riskFactor closer to 1, it values potential future gains over immediate
+    // returns
 
     protected void setup() {
         System.out.println("MerchantAgent " + getLocalName() + " started");
@@ -89,12 +91,35 @@ public class MerchantAgent extends Agent {
     private double predictExpectedPrice(String spice) {
         int currentPrice = prices.get(spice);
 
-        // to be completed
+        switch (nextRoundEvent) {
+            case "STORM":
+                if (nextRoundTarget != null && nextRoundTarget.equals(spice)) {
 
-        // example
-        double priceChangeFactor = 1.1;
+                    // Introduce a trade-off: assume stock loss will dampen price benefits.
+                    double adjustedPrice = currentPrice * 1.5; // Price increase due to storm
+                    double stockLossFactor = 0.5; // Losing 50% of stock
+                    return adjustedPrice * stockLossFactor;
+                }
+                break;
 
-        return currentPrice * priceChangeFactor;
+            case "TRADE_ROUTE":
+                if (nextRoundTarget != null && nextRoundTarget.equals(spice)) {
+                    // Decreasing price by 20%.
+                    return currentPrice * 0.8;
+                }
+                break;
+
+            case "SULTAN_TAX":
+                // Reducing prices by 10%.
+                return currentPrice * 0.9;
+
+            default:
+                // Return the current price since roundWeight is already taken into account
+                return currentPrice;
+        }
+
+        // Return the current price since roundWeight is already taken into account
+        return currentPrice;
     }
 
     private double normalizeUtilitySell(String spice) {
