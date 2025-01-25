@@ -89,16 +89,16 @@ public class BazaarAgent extends Agent {
     private class GameEndingBehaviour extends OneShotBehaviour {
         public void action() {
             System.out.println(getLocalName() + " - game has ended, getting results");
-    
+
             AID winner = null;
             Integer winnerCoins = null;
-    
+
             for (Map.Entry<AID, Integer> entry : wallets.entrySet()) {
                 AID key = entry.getKey();
                 Integer value = entry.getValue();
-                
+
                 System.out.println(key.getLocalName() + " has " + value.toString() + " coins");
-    
+
                 if (winner == null) {
                     winner = key;
                     winnerCoins = value;
@@ -109,7 +109,7 @@ public class BazaarAgent extends Agent {
                     }
                 }
             }
-    
+
             System.out.println("Winner is: " + winner.getLocalName());
         }
     }
@@ -292,17 +292,6 @@ public class BazaarAgent extends Agent {
             send(broadcastMessage);
             System.out.println(getLocalName() + " - " + messageContent);
 
-            // // Wait for ACK messages from all participants
-            // int ackReceived = 0;
-            // while (ackReceived < activeParticipants.size()) {
-            // ACLMessage reply = blockingReceive(); // Blocking until an ACK is received
-            // if (reply != null && reply.getPerformative() == ACLMessage.CONFIRM) {
-            // ackReceived++;
-            // }
-            // }
-            // System.out.println(getLocalName() + " - All participants acknowledged the
-            // broadcast.");
-
             // Wait for sale decisions from all participants
             int decisionsReceived = 0;
             while (decisionsReceived < activeParticipants.size()) {
@@ -334,9 +323,9 @@ public class BazaarAgent extends Agent {
                     int totalValue = Integer.parseInt(saleDetails[2]);
 
                     AID agentID = reply.getSender();
-                    if(wallets.containsKey(agentID)){
+                    if (wallets.containsKey(agentID)) {
                         wallets.put(agentID, wallets.get(agentID) + totalValue);
-                    }else{
+                    } else {
                         wallets.put(agentID, totalValue);
                     }
 

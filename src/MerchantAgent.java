@@ -12,7 +12,7 @@ import jade.lang.acl.ACLMessage;
 import java.util.HashMap;
 import java.util.Map;
 
-// to simplify the negotiations: (for now)
+// to simplify the negotiations:
 // limit negotiations to one proposal per round per agent
 // propose simple spice per spice trades
 // accept or reject with no counter-proposals
@@ -34,6 +34,7 @@ public class MerchantAgent extends Agent {
 
     // agents with diffrent risk factors (0.1, 0.5, 0.9)
     private double riskFactor = 0.5; // default risk factor
+
     // riskFactor closer to 0:
     // values immediate returns over potential future gains
     // propose safer trades that guarantee immediate returns
@@ -101,12 +102,6 @@ public class MerchantAgent extends Agent {
     }
 
     private double calculateRawUtilitySell(String spice) {
-        // int currentPrice;
-        // if (prices.get(spice) == null) {
-        //     currentPrice = 0;
-        // } else {
-        //     currentPrice = prices.get(spice);
-        // }
         int currentPrice = prices.get(spice);
         double expectedPrice = predictExpectedPrice(spice);
         double roundWeight = (double) currentRound / totalRounds;
@@ -121,13 +116,6 @@ public class MerchantAgent extends Agent {
     }
 
     private double predictExpectedPrice(String spice) {
-        // int currentPrice;
-        // if (prices.get(spice) == null) {
-        //     currentPrice = 0;
-        // } else {
-        //     currentPrice = prices.get(spice);
-        // }
-
         int currentPrice = prices.get(spice);
 
         if (nextRoundEvent == null) {
@@ -190,15 +178,13 @@ public class MerchantAgent extends Agent {
     private void proposeTrade() {
         String spiceToSell = chooseSpiceToSell();
         String spiceToBuy = chooseSpiceToBuy(spiceToSell);
-        int quantityToSell = decideQuantityToSell(spiceToSell);
-        int quantityToBuy = (int) Math.round(quantityToSell * adjustTradeRatio(spiceToSell, spiceToBuy));
-    
+
         ACLMessage proposal = new ACLMessage(ACLMessage.PROPOSE);
         AID[] merchants = findAgentsByService("market");
-    
+
         boolean tradeProposed = false;
-    
-        if (spiceToSell == null || spiceToBuy == null || quantityToSell <= 0 || quantityToBuy <= 0) {
+
+        if (spiceToSell == null || spiceToBuy == null) {
             proposal.setContent("NO_TRADE");
             if (merchants != null) {
                 for (AID merchant : merchants) {
@@ -208,9 +194,12 @@ public class MerchantAgent extends Agent {
             send(proposal);
             System.out.println(getLocalName() + " - No valid trade proposal can be made. Sent NO_TRADE");
         } else {
+            int quantityToSell = decideQuantityToSell(spiceToSell);
+            int quantityToBuy = (int) Math.round(quantityToSell * adjustTradeRatio(spiceToSell, spiceToBuy));
+
             String tradeProposal = spiceToSell + "," + quantityToSell + "," + spiceToBuy + "," + quantityToBuy;
             proposal.setContent(tradeProposal);
-    
+
             if (merchants != null) {
                 for (AID merchant : merchants) {
                     proposal.addReceiver(merchant);
@@ -220,7 +209,7 @@ public class MerchantAgent extends Agent {
             tradeProposed = true;
             System.out.println(getLocalName() + " - Sent trade proposal: " + tradeProposal);
         }
-    
+
         int proposalsReceived = 0;
         int numberOfMerchants = merchants != null ? merchants.length : 0; // Include all merchants
         while (proposalsReceived < numberOfMerchants) {
@@ -230,7 +219,7 @@ public class MerchantAgent extends Agent {
                 proposalsReceived++;
             }
         }
-    
+
         if (tradeProposed) {
             ACLMessage reply = blockingReceive();
             if (reply != null) {
@@ -365,14 +354,8 @@ public class MerchantAgent extends Agent {
                 nextRoundTarget = null;
             }
 
-            // propose trade test
+            // propose trade
             proposeTrade();
-
-            // // Send ACK back
-            // ACLMessage ack = msg.createReply();
-            // ack.setPerformative(ACLMessage.CONFIRM);
-            // ack.setContent("ACK");
-            // myAgent.send(ack);
 
             // decide what to sell
             String saleDecision = decideMarketSale();
