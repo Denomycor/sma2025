@@ -41,7 +41,8 @@ public class MerchantAgent extends Agent {
 
     // riskFactor closer to 1:
     // values potential future gains over immediate returns
-    // propose trades that are more beneficial in the long term, even if they seem risky in the short term
+    // propose trades that are more beneficial in the long term, even if they seem
+    // risky in the short term
     // accept trades with higher potential future gains but also higher uncertainty
 
     protected void setup() {
@@ -178,32 +179,32 @@ public class MerchantAgent extends Agent {
         String spiceToBuy = chooseSpiceToBuy(spiceToSell);
         int quantityToSell = decideQuantityToSell(spiceToSell);
         int quantityToBuy = (int) Math.round(quantityToSell * adjustTradeRatio(spiceToSell, spiceToBuy));
-    
+
         if (spiceToSell == null || spiceToBuy == null || quantityToSell <= 0 || quantityToBuy <= 0) {
             System.out.println(getLocalName() + " - No valid trade proposal can be made.");
             return;
         }
-    
+
         String tradeProposal = spiceToSell + "," + quantityToSell + "," + spiceToBuy + "," + quantityToBuy;
-    
+
         ACLMessage proposal = new ACLMessage(ACLMessage.PROPOSE);
         proposal.setContent(tradeProposal);
-    
+
         int numberOfMerchants = 0;
         AID[] merchants = findAgentsByService("market");
         if (merchants != null) {
             for (AID merchant : merchants) {
                 if (!merchant.equals(getAID())) {
                     proposal.addReceiver(merchant);
-                    numberOfMerchants ++;
+                    numberOfMerchants++;
                 }
             }
         }
-    
+
         send(proposal);
         System.out.println(getLocalName() + " - Sent trade proposal: " + tradeProposal);
 
-        // Wait for proposals from all merchants
+        // Wait for proposals
         int proposalsReceived = 0;
         while (proposalsReceived < numberOfMerchants) {
             ACLMessage reply = blockingReceive();
@@ -212,15 +213,17 @@ public class MerchantAgent extends Agent {
                 proposalsReceived++;
             }
         }
-    
-        // Wait for a response (ACCEPT_PROPOSAL or REJECT_PROPOSAL)
+
+        // Wait for ACCEPT_PROPOSAL or REJECT_PROPOSAL
         ACLMessage reply = blockingReceive();
         if (reply != null) {
             if (reply.getPerformative() == ACLMessage.ACCEPT_PROPOSAL) {
-                System.out.println(getLocalName() + " - Trade proposal accepted by " + reply.getSender().getLocalName());
+                System.out
+                        .println(getLocalName() + " - Trade proposal accepted by " + reply.getSender().getLocalName());
                 finalizeTrade(reply);
             } else if (reply.getPerformative() == ACLMessage.REJECT_PROPOSAL) {
-                System.out.println(getLocalName() + " - Trade proposal rejected by " + reply.getSender().getLocalName());
+                System.out
+                        .println(getLocalName() + " - Trade proposal rejected by " + reply.getSender().getLocalName());
             }
         } else {
             System.out.println(getLocalName() + " - No response received for the trade proposal.");
@@ -229,23 +232,24 @@ public class MerchantAgent extends Agent {
 
     private void finalizeTrade(ACLMessage msg) {
         String proposalContent = msg.getContent();
-    
+
         System.out.println(getLocalName() + " - Finalizing trade: " + proposalContent);
-    
+
         String[] tradeDetails = proposalContent.split(",");
         String spiceToSell = tradeDetails[0];
         int quantityToSell = Integer.parseInt(tradeDetails[1]);
         String spiceToBuy = tradeDetails[2];
         int quantityToBuy = Integer.parseInt(tradeDetails[3]);
-    
+
         // Update stock based on the trade
         stock.put(spiceToSell, stock.get(spiceToSell) - quantityToSell);
         stock.put(spiceToBuy, stock.get(spiceToBuy) + quantityToBuy);
-    
+
         System.out.println(getLocalName() + " - Trade finalized. Updated stock: " + stock);
     }
 
-    private boolean evaluateTradeProposal(String spiceOffered, int quantityOffered, String spiceRequested, int quantityRequested) {
+    private boolean evaluateTradeProposal(String spiceOffered, int quantityOffered, String spiceRequested,
+            int quantityRequested) {
         double utilityGain = calculateRawUtilityHold(spiceOffered) * quantityOffered;
         double utilityLoss = calculateRawUtilitySell(spiceRequested) * quantityRequested;
 
@@ -255,7 +259,8 @@ public class MerchantAgent extends Agent {
     private String chooseSpiceToSell() {
         return stock.entrySet().stream()
                 .filter(entry -> entry.getValue() > 0)
-                .max((entry1, entry2) -> Double.compare(normalizeUtilitySell(entry1.getKey()), normalizeUtilitySell(entry2.getKey())))
+                .max((entry1, entry2) -> Double.compare(normalizeUtilitySell(entry1.getKey()),
+                        normalizeUtilitySell(entry2.getKey())))
                 .map(Map.Entry::getKey)
                 .orElse(null);
     }
@@ -345,11 +350,55 @@ public class MerchantAgent extends Agent {
             // propose trade test
             proposeTrade();
 
-            // Send ACK back
-            ACLMessage ack = msg.createReply();
-            ack.setPerformative(ACLMessage.CONFIRM);
-            ack.setContent("ACK");
-            myAgent.send(ack);
+            // // Send ACK back
+            // ACLMessage ack = msg.createReply();
+            // ack.setPerformative(ACLMessage.CONFIRM);
+            // ack.setContent("ACK");
+            // myAgent.send(ack);
+
+            // decide what to sell
+            String saleDecision = decideMarketSale();
+
+            ACLMessage reply = msg.createReply();
+            reply.setPerformative(ACLMessage.INFORM);
+            reply.setContent(saleDecision);
+            send(reply);
+
+            System.out.println(getLocalName() + " - Sent market sale decision: " + saleDecision);
+        }
+
+        private String decideMarketSale() {
+            StringBuilder saleDecision = new StringBuilder();
+            boolean isSelling = false;
+
+            for (String spice : stock.keySet()) {
+                int quantityToSell = decideQuantityToSell(spice);
+                if (quantityToSell > 0) {
+                    isSelling = true;
+                    int pricePerUnit = prices.get(spice);
+                    int totalValue = quantityToSell * pricePerUnit;
+
+                    saleDecision.append(spice)
+                            .append(",")
+                            .append(quantityToSell)
+                            .append(",")
+                            .append(totalValue)
+                            .append(";");
+
+                    stock.put(spice, stock.get(spice) - quantityToSell);
+                }
+            }
+
+            if (!isSelling) {
+                return "HOLD"; // no sale
+            }
+
+            // remove semicolon
+            if (saleDecision.length() > 0 && saleDecision.charAt(saleDecision.length() - 1) == ';') {
+                saleDecision.deleteCharAt(saleDecision.length() - 1);
+            }
+
+            return saleDecision.toString();
         }
 
     }
@@ -357,15 +406,15 @@ public class MerchantAgent extends Agent {
     private void handleTradeProposal(ACLMessage msg) {
         String proposalContent = msg.getContent();
         ACLMessage reply = msg.createReply();
-    
+
         System.out.println(getLocalName() + " - Received trade proposal: " + proposalContent);
-    
+
         String[] tradeDetails = proposalContent.split(",");
         String spiceToSell = tradeDetails[0];
         int quantityToSell = Integer.parseInt(tradeDetails[1]);
         String spiceToBuy = tradeDetails[2];
         int quantityToBuy = Integer.parseInt(tradeDetails[3]);
-    
+
         boolean isAcceptable = evaluateTradeProposal(spiceToBuy, quantityToBuy, spiceToSell, quantityToSell);
         if (isAcceptable) {
             reply.setPerformative(ACLMessage.ACCEPT_PROPOSAL);

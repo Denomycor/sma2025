@@ -197,11 +197,13 @@ public class BazaarAgent extends Agent {
             if (nextRoundEventType != null) {
                 switch (nextRoundEventType) {
                     case "SULTAN_TAX":
-                    // Decrease all prices due to Sultan's tax
-                    for (Map.Entry<String, Integer> entry : prices.entrySet()) {
-                        prices.put(entry.getKey(), Math.max(1, (int) (entry.getValue() * 0.9))); // 10% decrease, with a floor of 1
-                    }
-                    break;
+                        // Decrease all prices due to Sultan's tax
+                        for (Map.Entry<String, Integer> entry : prices.entrySet()) {
+                            prices.put(entry.getKey(), Math.max(1, (int) (entry.getValue() * 0.9))); // 10% decrease,
+                                                                                                     // with a floor of
+                                                                                                     // 1
+                        }
+                        break;
 
                     case "TRADE_ROUTE":
                         // Decrease price of the affected spice due to a new trade route
@@ -260,15 +262,52 @@ public class BazaarAgent extends Agent {
             send(broadcastMessage);
             System.out.println(getLocalName() + " - " + messageContent);
 
-            // Wait for ACK messages from all participants
-            int ackReceived = 0;
-            while (ackReceived < activeParticipants.size()) {
-                ACLMessage reply = blockingReceive(); // Blocking until an ACK is received
-                if (reply != null && reply.getPerformative() == ACLMessage.CONFIRM) {
-                    ackReceived++;
+            // // Wait for ACK messages from all participants
+            // int ackReceived = 0;
+            // while (ackReceived < activeParticipants.size()) {
+            // ACLMessage reply = blockingReceive(); // Blocking until an ACK is received
+            // if (reply != null && reply.getPerformative() == ACLMessage.CONFIRM) {
+            // ackReceived++;
+            // }
+            // }
+            // System.out.println(getLocalName() + " - All participants acknowledged the
+            // broadcast.");
+
+            // Wait for sale decisions from all participants
+            int decisionsReceived = 0;
+            while (decisionsReceived < activeParticipants.size()) {
+                ACLMessage reply = blockingReceive(); // Wait for responses
+                if (reply != null && reply.getPerformative() == ACLMessage.INFORM) {
+                    processSaleDecision(reply);
+                    decisionsReceived++;
                 }
             }
-            System.out.println(getLocalName() + " - All participants acknowledged the broadcast.");
+            System.out.println(getLocalName() + " - All participants submitted their sale decisions.");
+        }
+
+        // Process a sale decision message from a merchant
+        private void processSaleDecision(ACLMessage reply) {
+            String content = reply.getContent();
+            System.out.println(getLocalName() + " - Received sale decision: " + content + " from "
+                    + reply.getSender().getLocalName());
+
+            if ("HOLD".equals(content)) {
+                // The merchant decided to hold their stock
+                System.out.println(reply.getSender().getLocalName() + " decided to hold their stock.");
+            } else {
+                // Parse and update the market stock
+                String[] saleEntries = content.split(";");
+                for (String saleEntry : saleEntries) {
+                    String[] saleDetails = saleEntry.split(",");
+                    String spice = saleDetails[0];
+                    int quantity = Integer.parseInt(saleDetails[1]);
+                    int totalValue = Integer.parseInt(saleDetails[2]);
+
+                    // Log the sale
+                    System.out.println(reply.getSender().getLocalName() + " sold " + quantity + " " + spice + " for "
+                            + totalValue + " coins.");
+                }
+            }
         }
 
         private void determineNextRoundEvent() {
