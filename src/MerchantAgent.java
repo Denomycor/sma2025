@@ -1,5 +1,6 @@
 package projectAgents;
 
+import jade.core.AID;
 import jade.core.Agent;
 import jade.core.behaviours.CyclicBehaviour;
 import jade.domain.DFService;
@@ -10,6 +11,15 @@ import jade.lang.acl.ACLMessage;
 
 import java.util.HashMap;
 import java.util.Map;
+
+// to simplify the negotiations: (for now)
+// limit negotiations to one proposal per round per agent
+// propose simple spice per spice trades
+// accept or reject with no counter-proposals
+// the merchant will broadcast his proposal to all other merchants
+// if multiple accept he will choose one randomly to trade with
+// if one accepts trade with that one
+// if no one accepts the trade fails
 
 public class MerchantAgent extends Agent {
 
@@ -23,14 +33,29 @@ public class MerchantAgent extends Agent {
     private int currentRound = 0;
 
     // agents with diffrent risk factors (0.1, 0.5, 0.9)
-    private double riskFactor = 1.0;
-    // riskFactor closer to 0, it values immediate returns over potential future
-    // gains
-    // riskFactor closer to 1, it values potential future gains over immediate
-    // returns
+    private double riskFactor = 0.5; // default risk factor
+    // riskFactor closer to 0:
+    // values immediate returns over potential future gains
+    // propose safer trades that guarantee immediate returns
+    // accept trades that immediately improve their utility with little risk
+
+    // riskFactor closer to 1:
+    // values potential future gains over immediate returns
+    // propose trades that are more beneficial in the long term, even if they seem risky in the short term
+    // accept trades with higher potential future gains but also higher uncertainty
 
     protected void setup() {
         System.out.println("MerchantAgent " + getLocalName() + " started");
+
+        Object[] args = getArguments();
+        if (args != null && args.length > 0) {
+            try {
+                riskFactor = Double.parseDouble(args[0].toString());
+                System.out.println(getLocalName() + " - Risk factor set to: " + riskFactor);
+            } catch (NumberFormatException e) {
+                System.err.println(getLocalName() + " - Invalid risk factor argument. Using default: " + riskFactor);
+            }
+        }
 
         initializeStock();
         initializePrices();
@@ -91,6 +116,11 @@ public class MerchantAgent extends Agent {
     private double predictExpectedPrice(String spice) {
         int currentPrice = prices.get(spice);
 
+        if (nextRoundEvent == null) {
+            // Return the current price since roundWeight is already taken into account
+            return currentPrice;
+        }
+
         switch (nextRoundEvent) {
             case "STORM":
                 if (nextRoundTarget != null && nextRoundTarget.equals(spice)) {
@@ -114,8 +144,7 @@ public class MerchantAgent extends Agent {
                 return currentPrice * 0.9;
 
             default:
-                // Return the current price since roundWeight is already taken into account
-                return currentPrice;
+                break;
         }
 
         // Return the current price since roundWeight is already taken into account
@@ -144,6 +173,108 @@ public class MerchantAgent extends Agent {
         return (int) Math.round(normalizedHold * stock.get(spice));
     }
 
+    private void proposeTrade() {
+        String spiceToSell = chooseSpiceToSell();
+        String spiceToBuy = chooseSpiceToBuy(spiceToSell);
+        int quantityToSell = decideQuantityToSell(spiceToSell);
+        int quantityToBuy = (int) Math.round(quantityToSell * adjustTradeRatio(spiceToSell, spiceToBuy));
+    
+        if (spiceToSell == null || spiceToBuy == null || quantityToSell <= 0 || quantityToBuy <= 0) {
+            System.out.println(getLocalName() + " - No valid trade proposal can be made.");
+            return;
+        }
+    
+        String tradeProposal = spiceToSell + "," + quantityToSell + "," + spiceToBuy + "," + quantityToBuy;
+    
+        ACLMessage proposal = new ACLMessage(ACLMessage.PROPOSE);
+        proposal.setContent(tradeProposal);
+    
+        int numberOfMerchants = 0;
+        AID[] merchants = findAgentsByService("market");
+        if (merchants != null) {
+            for (AID merchant : merchants) {
+                if (!merchant.equals(getAID())) {
+                    proposal.addReceiver(merchant);
+                    numberOfMerchants ++;
+                }
+            }
+        }
+    
+        send(proposal);
+        System.out.println(getLocalName() + " - Sent trade proposal: " + tradeProposal);
+
+        // Wait for proposals from all merchants
+        int proposalsReceived = 0;
+        while (proposalsReceived < numberOfMerchants) {
+            ACLMessage reply = blockingReceive();
+            if (reply != null && reply.getPerformative() == ACLMessage.PROPOSE) {
+                handleTradeProposal(reply);
+                proposalsReceived++;
+            }
+        }
+    
+        // Wait for a response (ACCEPT_PROPOSAL or REJECT_PROPOSAL)
+        ACLMessage reply = blockingReceive();
+        if (reply != null) {
+            if (reply.getPerformative() == ACLMessage.ACCEPT_PROPOSAL) {
+                System.out.println(getLocalName() + " - Trade proposal accepted by " + reply.getSender().getLocalName());
+                finalizeTrade(reply);
+            } else if (reply.getPerformative() == ACLMessage.REJECT_PROPOSAL) {
+                System.out.println(getLocalName() + " - Trade proposal rejected by " + reply.getSender().getLocalName());
+            }
+        } else {
+            System.out.println(getLocalName() + " - No response received for the trade proposal.");
+        }
+    }
+
+    private void finalizeTrade(ACLMessage msg) {
+        String proposalContent = msg.getContent();
+    
+        System.out.println(getLocalName() + " - Finalizing trade: " + proposalContent);
+    
+        String[] tradeDetails = proposalContent.split(",");
+        String spiceToSell = tradeDetails[0];
+        int quantityToSell = Integer.parseInt(tradeDetails[1]);
+        String spiceToBuy = tradeDetails[2];
+        int quantityToBuy = Integer.parseInt(tradeDetails[3]);
+    
+        // Update stock based on the trade
+        stock.put(spiceToSell, stock.get(spiceToSell) - quantityToSell);
+        stock.put(spiceToBuy, stock.get(spiceToBuy) + quantityToBuy);
+    
+        System.out.println(getLocalName() + " - Trade finalized. Updated stock: " + stock);
+    }
+
+    private boolean evaluateTradeProposal(String spiceOffered, int quantityOffered, String spiceRequested, int quantityRequested) {
+        double utilityGain = calculateRawUtilityHold(spiceOffered) * quantityOffered;
+        double utilityLoss = calculateRawUtilitySell(spiceRequested) * quantityRequested;
+
+        return riskFactor < 0.5 ? utilityGain > utilityLoss : utilityGain * (1 + riskFactor) > utilityLoss;
+    }
+
+    private String chooseSpiceToSell() {
+        return stock.entrySet().stream()
+                .filter(entry -> entry.getValue() > 0)
+                .max((entry1, entry2) -> Double.compare(normalizeUtilitySell(entry1.getKey()), normalizeUtilitySell(entry2.getKey())))
+                .map(Map.Entry::getKey)
+                .orElse(null);
+    }
+
+    private String chooseSpiceToBuy(String spiceToSell) {
+        return stock.keySet().stream()
+                .filter(spice -> !spice.equals(spiceToSell))
+                .max((spice1, spice2) -> Double.compare(normalizeUtilityHold(spice1), normalizeUtilityHold(spice2)))
+                .orElse(null);
+    }
+
+    private double adjustTradeRatio(String spiceToSell, String spiceToBuy) {
+        double expectedPriceSell = predictExpectedPrice(spiceToSell);
+        double expectedPriceBuy = predictExpectedPrice(spiceToBuy);
+
+        double baseRatio = expectedPriceSell / expectedPriceBuy;
+        return riskFactor < 0.5 ? baseRatio * (1 - riskFactor) : baseRatio * (1 + riskFactor);
+    }
+
     private class MessageHandler extends CyclicBehaviour {
         @Override
         public void action() {
@@ -157,7 +288,7 @@ public class MerchantAgent extends Agent {
                     reply.setPerformative(ACLMessage.INFORM);
                     reply.setContent(getStockAsCommaSeparatedString());
                     myAgent.send(reply);
-                    System.out.println(getLocalName() + " - Sent stock details: " + getStockAsCommaSeparatedString());
+                    System.out.println(getLocalName() + " - Sent stock details: " + stock);
                 } else if (msg.getPerformative() == ACLMessage.INFORM) {
                     if (msg.getContent().startsWith("PRICES,")) {
                         // Process Broadcast
@@ -199,7 +330,6 @@ public class MerchantAgent extends Agent {
             if (eventPart.startsWith("A storm destroyed")) {
                 nextRoundEvent = "STORM";
                 nextRoundTarget = eventPart.split(" ")[3];
-                System.out.println(getLocalName() + " - Next round event: STORM on " + nextRoundTarget);
             } else if (eventPart.startsWith("The Sultan has imposed a new tax")) {
                 nextRoundEvent = "SULTAN_TAX";
                 nextRoundTarget = null;
@@ -207,12 +337,13 @@ public class MerchantAgent extends Agent {
             } else if (eventPart.startsWith("A new trade route")) {
                 nextRoundEvent = "TRADE_ROUTE";
                 nextRoundTarget = eventPart.split(" ")[8];
-                System.out.println(getLocalName() + " - Next round event: TRADE_ROUTE for " + nextRoundTarget);
             } else {
                 nextRoundEvent = null;
                 nextRoundTarget = null;
-                System.out.println(getLocalName() + " - Next round event: No significant event.");
             }
+
+            // propose trade test
+            proposeTrade();
 
             // Send ACK back
             ACLMessage ack = msg.createReply();
@@ -221,6 +352,30 @@ public class MerchantAgent extends Agent {
             myAgent.send(ack);
         }
 
+    }
+
+    private void handleTradeProposal(ACLMessage msg) {
+        String proposalContent = msg.getContent();
+        ACLMessage reply = msg.createReply();
+    
+        System.out.println(getLocalName() + " - Received trade proposal: " + proposalContent);
+    
+        String[] tradeDetails = proposalContent.split(",");
+        String spiceToSell = tradeDetails[0];
+        int quantityToSell = Integer.parseInt(tradeDetails[1]);
+        String spiceToBuy = tradeDetails[2];
+        int quantityToBuy = Integer.parseInt(tradeDetails[3]);
+    
+        boolean isAcceptable = evaluateTradeProposal(spiceToBuy, quantityToBuy, spiceToSell, quantityToSell);
+        if (isAcceptable) {
+            reply.setPerformative(ACLMessage.ACCEPT_PROPOSAL);
+            reply.setContent(proposalContent);
+            System.out.println(getLocalName() + " - Accepted trade proposal: " + proposalContent);
+        } else {
+            reply.setPerformative(ACLMessage.REJECT_PROPOSAL);
+            System.out.println(getLocalName() + " - Rejected trade proposal: " + proposalContent);
+        }
+        send(reply);
     }
 
     private void registerInDF(String serviceType, String serviceName) {
@@ -235,6 +390,25 @@ public class MerchantAgent extends Agent {
             System.out.println(getLocalName() + " - registered with the DF as a " + serviceType + " agent.");
         } catch (FIPAException fe) {
             fe.printStackTrace();
+        }
+    }
+
+    private AID[] findAgentsByService(String serviceType) {
+        try {
+            DFAgentDescription dfd = new DFAgentDescription();
+            ServiceDescription sd = new ServiceDescription();
+            sd.setType(serviceType);
+            dfd.addServices(sd);
+
+            DFAgentDescription[] result = DFService.search(this, dfd);
+            AID[] agentIDs = new AID[result.length];
+            for (int i = 0; i < result.length; i++) {
+                agentIDs[i] = result[i].getName();
+            }
+            return agentIDs;
+        } catch (FIPAException e) {
+            e.printStackTrace();
+            return null;
         }
     }
 
