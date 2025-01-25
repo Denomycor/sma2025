@@ -101,6 +101,12 @@ public class MerchantAgent extends Agent {
     }
 
     private double calculateRawUtilitySell(String spice) {
+        // int currentPrice;
+        // if (prices.get(spice) == null) {
+        //     currentPrice = 0;
+        // } else {
+        //     currentPrice = prices.get(spice);
+        // }
         int currentPrice = prices.get(spice);
         double expectedPrice = predictExpectedPrice(spice);
         double roundWeight = (double) currentRound / totalRounds;
@@ -115,6 +121,13 @@ public class MerchantAgent extends Agent {
     }
 
     private double predictExpectedPrice(String spice) {
+        // int currentPrice;
+        // if (prices.get(spice) == null) {
+        //     currentPrice = 0;
+        // } else {
+        //     currentPrice = prices.get(spice);
+        // }
+
         int currentPrice = prices.get(spice);
 
         if (nextRoundEvent == null) {
@@ -179,33 +192,37 @@ public class MerchantAgent extends Agent {
         String spiceToBuy = chooseSpiceToBuy(spiceToSell);
         int quantityToSell = decideQuantityToSell(spiceToSell);
         int quantityToBuy = (int) Math.round(quantityToSell * adjustTradeRatio(spiceToSell, spiceToBuy));
-
-        if (spiceToSell == null || spiceToBuy == null || quantityToSell <= 0 || quantityToBuy <= 0) {
-            System.out.println(getLocalName() + " - No valid trade proposal can be made.");
-            return;
-        }
-
-        String tradeProposal = spiceToSell + "," + quantityToSell + "," + spiceToBuy + "," + quantityToBuy;
-
+    
         ACLMessage proposal = new ACLMessage(ACLMessage.PROPOSE);
-        proposal.setContent(tradeProposal);
-
-        int numberOfMerchants = 0;
         AID[] merchants = findAgentsByService("market");
-        if (merchants != null) {
-            for (AID merchant : merchants) {
-                if (!merchant.equals(getAID())) {
+    
+        boolean tradeProposed = false;
+    
+        if (spiceToSell == null || spiceToBuy == null || quantityToSell <= 0 || quantityToBuy <= 0) {
+            proposal.setContent("NO_TRADE");
+            if (merchants != null) {
+                for (AID merchant : merchants) {
                     proposal.addReceiver(merchant);
-                    numberOfMerchants++;
                 }
             }
+            send(proposal);
+            System.out.println(getLocalName() + " - No valid trade proposal can be made. Sent NO_TRADE");
+        } else {
+            String tradeProposal = spiceToSell + "," + quantityToSell + "," + spiceToBuy + "," + quantityToBuy;
+            proposal.setContent(tradeProposal);
+    
+            if (merchants != null) {
+                for (AID merchant : merchants) {
+                    proposal.addReceiver(merchant);
+                }
+            }
+            send(proposal);
+            tradeProposed = true;
+            System.out.println(getLocalName() + " - Sent trade proposal: " + tradeProposal);
         }
-
-        send(proposal);
-        System.out.println(getLocalName() + " - Sent trade proposal: " + tradeProposal);
-
-        // Wait for proposals
+    
         int proposalsReceived = 0;
+        int numberOfMerchants = merchants != null ? merchants.length : 0; // Include all merchants
         while (proposalsReceived < numberOfMerchants) {
             ACLMessage reply = blockingReceive();
             if (reply != null && reply.getPerformative() == ACLMessage.PROPOSE) {
@@ -213,20 +230,21 @@ public class MerchantAgent extends Agent {
                 proposalsReceived++;
             }
         }
-
-        // Wait for ACCEPT_PROPOSAL or REJECT_PROPOSAL
-        ACLMessage reply = blockingReceive();
-        if (reply != null) {
-            if (reply.getPerformative() == ACLMessage.ACCEPT_PROPOSAL) {
-                System.out
-                        .println(getLocalName() + " - Trade proposal accepted by " + reply.getSender().getLocalName());
-                finalizeTrade(reply);
-            } else if (reply.getPerformative() == ACLMessage.REJECT_PROPOSAL) {
-                System.out
-                        .println(getLocalName() + " - Trade proposal rejected by " + reply.getSender().getLocalName());
+    
+        if (tradeProposed) {
+            ACLMessage reply = blockingReceive();
+            if (reply != null) {
+                if (reply.getPerformative() == ACLMessage.ACCEPT_PROPOSAL) {
+                    System.out.println(
+                            getLocalName() + " - Trade proposal accepted by " + reply.getSender().getLocalName());
+                    finalizeTrade(reply);
+                } else if (reply.getPerformative() == ACLMessage.REJECT_PROPOSAL) {
+                    System.out.println(
+                            getLocalName() + " - Trade proposal rejected by " + reply.getSender().getLocalName());
+                }
+            } else {
+                System.out.println(getLocalName() + " - No response received for the trade proposal.");
             }
-        } else {
-            System.out.println(getLocalName() + " - No response received for the trade proposal.");
         }
     }
 
@@ -404,10 +422,16 @@ public class MerchantAgent extends Agent {
     }
 
     private void handleTradeProposal(ACLMessage msg) {
+
         String proposalContent = msg.getContent();
         ACLMessage reply = msg.createReply();
 
         System.out.println(getLocalName() + " - Received trade proposal: " + proposalContent);
+
+        if ("NO_TRADE".equals(proposalContent)) {
+            System.out.println(getLocalName() + " - No trade proposal from " + msg.getSender().getLocalName());
+            return;
+        }
 
         String[] tradeDetails = proposalContent.split(",");
         String spiceToSell = tradeDetails[0];
