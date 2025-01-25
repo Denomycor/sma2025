@@ -22,6 +22,7 @@ public class BazaarAgent extends Agent {
     private static final int TOTAL_ROUNDS = 10;
     private Map<String, Integer> prices = new HashMap<>();
     private Map<String, Integer> stock = new HashMap<>();
+    private Map<AID, Integer> wallets = new HashMap<>();
 
     @Override
     protected void setup() {
@@ -40,6 +41,7 @@ public class BazaarAgent extends Agent {
             SequentialBehaviour behaviour = new SequentialBehaviour(this);
             behaviour.addSubBehaviour(new GameStartBehaviour());
             behaviour.addSubBehaviour(new RoundBehaviour());
+            behaviour.addSubBehaviour(new GameEndingBehavior());
             addBehaviour(behaviour);
 
         } else {
@@ -81,6 +83,28 @@ public class BazaarAgent extends Agent {
                     ackReceived++;
                 }
             }
+        }
+    }
+
+    private class GameEndingBehaviour extends OneShotBehaviour {
+        public void action() {
+            System.out.println(getLocalName() + " - game has ended, getttin results");
+
+            AID winner = null;
+            Integer winnerCoins = null;
+
+            wallets.forEach((key, value) -> {
+                System.out.print(AID.toString() + " has " + value.toString() + " coins");
+
+                if(winner == null){
+                    winner = key;
+                    winnerCoins = value;
+                }else{
+                    winner = winnerCoins > value ? winner : key;
+                }
+            });
+
+            System.out.println("Winner is: " + winner.toString());
         }
     }
 
@@ -302,6 +326,13 @@ public class BazaarAgent extends Agent {
                     String spice = saleDetails[0];
                     int quantity = Integer.parseInt(saleDetails[1]);
                     int totalValue = Integer.parseInt(saleDetails[2]);
+
+                    AID agentID = reply.getSender();
+                    if(wallets.containsKey(AID)){
+                        wallets.put(agentID, wallets.get(agentID) + totalValue);
+                    }else{
+                        wallets.put(agentID, totalValue);
+                    }
 
                     // Log the sale
                     System.out.println(reply.getSender().getLocalName() + " sold " + quantity + " " + spice + " for "
