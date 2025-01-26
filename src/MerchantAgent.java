@@ -12,15 +12,6 @@ import jade.lang.acl.ACLMessage;
 import java.util.HashMap;
 import java.util.Map;
 
-// to simplify the negotiations:
-// limit negotiations to one proposal per round per agent
-// propose simple spice per spice trades
-// accept or reject with no counter-proposals
-// the merchant will broadcast his proposal to all other merchants
-// if multiple accept he will choose one randomly to trade with
-// if one accepts trade with that one
-// if no one accepts the trade fails
-
 public class MerchantAgent extends Agent {
 
     private Map<String, Integer> stock;
@@ -34,17 +25,6 @@ public class MerchantAgent extends Agent {
 
     // agents with diffrent risk factors (0.1, 0.5, 0.9)
     private double riskFactor = 0.5; // default risk factor
-
-    // riskFactor closer to 0:
-    // values immediate returns over potential future gains
-    // propose safer trades that guarantee immediate returns
-    // accept trades that immediately improve their utility with little risk
-
-    // riskFactor closer to 1:
-    // values potential future gains over immediate returns
-    // propose trades that are more beneficial in the long term, even if they seem
-    // risky in the short term
-    // accept trades with higher potential future gains but also higher uncertainty
 
     protected void setup() {
         System.out.println("MerchantAgent " + getLocalName() + " started");
@@ -178,12 +158,12 @@ public class MerchantAgent extends Agent {
     private void proposeTrade() {
         String spiceToSell = chooseSpiceToSell();
         String spiceToBuy = chooseSpiceToBuy(spiceToSell);
-
+    
         ACLMessage proposal = new ACLMessage(ACLMessage.PROPOSE);
         AID[] merchants = findAgentsByService("market");
-
+    
         boolean tradeProposed = false;
-
+    
         if (spiceToSell == null || spiceToBuy == null) {
             proposal.setContent("NO_TRADE");
             if (merchants != null) {
@@ -199,7 +179,7 @@ public class MerchantAgent extends Agent {
 
             String tradeProposal = spiceToSell + "," + quantityToSell + "," + spiceToBuy + "," + quantityToBuy;
             proposal.setContent(tradeProposal);
-
+    
             if (merchants != null) {
                 for (AID merchant : merchants) {
                     proposal.addReceiver(merchant);
@@ -209,7 +189,7 @@ public class MerchantAgent extends Agent {
             tradeProposed = true;
             System.out.println(getLocalName() + " - Sent trade proposal: " + tradeProposal);
         }
-
+    
         int proposalsReceived = 0;
         int numberOfMerchants = merchants != null ? merchants.length : 0; // Include all merchants
         while (proposalsReceived < numberOfMerchants) {
@@ -219,7 +199,7 @@ public class MerchantAgent extends Agent {
                 proposalsReceived++;
             }
         }
-
+    
         if (tradeProposed) {
             ACLMessage reply = blockingReceive();
             if (reply != null) {
