@@ -22,6 +22,7 @@ public class BazaarAgent extends Agent {
     private static final int TOTAL_ROUNDS = 10;
     private Map<String, Integer> prices = new HashMap<>();
     private Map<String, Integer> stock = new HashMap<>();
+    private Map<AID, Integer> wallets = new HashMap<>();
 
     @Override
     protected void setup() {
@@ -40,6 +41,7 @@ public class BazaarAgent extends Agent {
             SequentialBehaviour behaviour = new SequentialBehaviour(this);
             behaviour.addSubBehaviour(new GameStartBehaviour());
             behaviour.addSubBehaviour(new RoundBehaviour());
+            behaviour.addSubBehaviour(new GameEndingBehaviour());
             addBehaviour(behaviour);
 
         } else {
@@ -81,6 +83,34 @@ public class BazaarAgent extends Agent {
                     ackReceived++;
                 }
             }
+        }
+    }
+
+    private class GameEndingBehaviour extends OneShotBehaviour {
+        public void action() {
+            System.out.println(getLocalName() + " - game has ended, getting results");
+    
+            AID winner = null;
+            Integer winnerCoins = null;
+    
+            for (Map.Entry<AID, Integer> entry : wallets.entrySet()) {
+                AID key = entry.getKey();
+                Integer value = entry.getValue();
+                
+                System.out.println(key.getLocalName() + " has " + value.toString() + " coins");
+    
+                if (winner == null) {
+                    winner = key;
+                    winnerCoins = value;
+                } else {
+                    if (value > winnerCoins) {
+                        winner = key;
+                        winnerCoins = value;
+                    }
+                }
+            }
+    
+            System.out.println("Winner is: " + winner.getLocalName());
         }
     }
 
@@ -262,17 +292,6 @@ public class BazaarAgent extends Agent {
             send(broadcastMessage);
             System.out.println(getLocalName() + " - " + messageContent);
 
-            // // Wait for ACK messages from all participants
-            // int ackReceived = 0;
-            // while (ackReceived < activeParticipants.size()) {
-            // ACLMessage reply = blockingReceive(); // Blocking until an ACK is received
-            // if (reply != null && reply.getPerformative() == ACLMessage.CONFIRM) {
-            // ackReceived++;
-            // }
-            // }
-            // System.out.println(getLocalName() + " - All participants acknowledged the
-            // broadcast.");
-
             // Wait for sale decisions from all participants
             int decisionsReceived = 0;
             while (decisionsReceived < activeParticipants.size()) {
@@ -302,6 +321,13 @@ public class BazaarAgent extends Agent {
                     String spice = saleDetails[0];
                     int quantity = Integer.parseInt(saleDetails[1]);
                     int totalValue = Integer.parseInt(saleDetails[2]);
+
+                    AID agentID = reply.getSender();
+                    if(wallets.containsKey(agentID)){
+                        wallets.put(agentID, wallets.get(agentID) + totalValue);
+                    }else{
+                        wallets.put(agentID, totalValue);
+                    }
 
                     // Log the sale
                     System.out.println(reply.getSender().getLocalName() + " sold " + quantity + " " + spice + " for "
